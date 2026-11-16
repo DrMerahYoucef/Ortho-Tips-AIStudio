@@ -649,6 +649,7 @@
     <string name="widget_events_title">Tomorrow</string>
     <string name="widget_switch">Switch</string>
     <string name="widget_no_shifts">No upcoming shift</string>
+    <string name="widget_no_events_today">Nothing planned today</string>
     <string name="widget_no_events">Nothing planned tomorrow</string>
     <string name="widget_today">On call today</string>
     <string name="widget_tomorrow">Tomorrow</string>

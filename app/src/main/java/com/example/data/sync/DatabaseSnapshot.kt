@@ -1,5 +1,8 @@
 package com.example.data.sync
 
+import android.database.Cursor
+import android.util.Base64
+import com.example.data.crypto.Hashing
 import com.example.data.local.OrthoDatabase
 import com.example.data.telegram.DriveLog
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +27,10 @@ import java.io.File
  * Restore is INSERT OR REPLACE inside one transaction, per-row keyed by the
  * table's own primary key, so a partial snapshot merges instead of clobbering.
  */
-class DatabaseSnapshot(private val database: OrthoDatabase) {
+class DatabaseSnapshot(
+    private val database: OrthoDatabase,
+    private val onRecordsImported: (() -> Unit)? = null
+) {
 
     /** Tables owned by the sync layer itself; snapshotting them would recurse. */
     private val excluded = setOf(
@@ -37,14 +43,12 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
     )
 
     suspend fun export(destination: File): SnapshotSummary = withContext(Dispatchers.IO) {
-        // Reads go through Room's own connection rather than openHelper's, so an
-        // export always sees what the DAOs just wrote. Reading straight off
-        // openHelper can hand back a connection Room is not writing through.
         val db = database.openHelper.writableDatabase
         DriveLog.d(TAG, "Exporting from ${db.path}")
+        val createdAt = System.currentTimeMillis()
         val root = JSONObject()
         root.put("format", FORMAT_VERSION)
-        root.put("createdAt", System.currentTimeMillis())
+        root.put("createdAt", createdAt)
 
         val tables = JSONObject()
         var totalRows = 0
@@ -56,8 +60,14 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
                 while (cursor.moveToNext()) {
                     val row = JSONObject()
                     columns.forEachIndexed { index, column ->
-                        when {
-                            cursor.isNull(index) -> row.put(column, JSONObject.NULL)
+                        when (cursor.getType(index)) {
+                            Cursor.FIELD_TYPE_NULL -> row.put(column, JSONObject.NULL)
+                            Cursor.FIELD_TYPE_INTEGER -> row.put(column, cursor.getLong(index))
+                            Cursor.FIELD_TYPE_FLOAT -> row.put(column, cursor.getDouble(index))
+                            Cursor.FIELD_TYPE_BLOB -> row.put(
+                                column,
+                                BLOB_PREFIX + Base64.encodeToString(cursor.getBlob(index), Base64.NO_WRAP)
+                            )
                             else -> row.put(column, cursor.getString(index))
                         }
                     }
@@ -82,7 +92,8 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
             tableCount = tables.length(),
             rowCount = totalRows,
             sizeBytes = destination.length(),
-            createdAt = root.getLong("createdAt")
+            createdAt = createdAt,
+            contentHash = canonicalTablesHash(tables)
         )
     }
 
@@ -108,11 +119,6 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
         var importedTables = 0
         db.beginTransaction()
         try {
-            // Children are inserted before their parents unless the order is
-            // fixed, and Room enforces foreign keys, so the first patient_images
-            // row would fail and roll the whole import back. Deferring the checks
-            // to commit time makes insertion order irrelevant; the ordering below
-            // is belt and braces for anything the pragma does not cover.
             db.execSQL("PRAGMA defer_foreign_keys = TRUE")
 
             for (table in insertionOrder(tables.keys().asSequence().toList())) {
@@ -130,7 +136,7 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
                     val placeholders = columns.joinToString(",") { "?" }
                     val columnList = columns.joinToString(",") { "`$it`" }
                     val values = columns.map { column ->
-                        if (row.isNull(column)) null else row.getString(column)
+                        decodeValue(row, column)
                     }.toTypedArray()
                     try {
                         db.execSQL(
@@ -139,9 +145,6 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
                         )
                         totalRows++
                     } catch (e: Exception) {
-                        // Naming the table matters: a silent rollback here is what
-                        // made this look like an empty database rather than a
-                        // failed import.
                         DriveLog.e(TAG, "Row $i of '$table' could not be imported", e)
                         throw e
                     }
@@ -152,9 +155,14 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
             db.endTransaction()
         }
 
+        // Raw SQL writes bypass Room's DAO wrappers, so flush tracked table invalidations
+        // and notify listeners (like the home-screen widget) once the transaction commits.
+        if (totalRows > 0) {
+            runCatching { database.invalidationTracker.refreshVersionsAsync() }
+            runCatching { onRecordsImported?.invoke() }
+        }
+
         DriveLog.i(TAG, "Snapshot imported: $totalRows rows into $importedTables tables")
-        // Immediately read one row back. If this says 0 after a non-zero import,
-        // the write is not reaching the connection the rest of the app reads from.
         runCatching {
             db.query("SELECT COUNT(*) FROM `patients`").use { c ->
                 if (c.moveToFirst()) DriveLog.i(TAG, "patients now holds ${c.getInt(0)} rows")
@@ -164,11 +172,12 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
             tableCount = importedTables,
             rowCount = totalRows,
             sizeBytes = source.length(),
-            createdAt = root.optLong("createdAt", 0)
+            createdAt = root.optLong("createdAt", 0),
+            contentHash = canonicalTablesHash(tables)
         )
     }
 
-    /** Reads snapshot metadata without applying it, for the conflict prompt. */
+    /** Reads snapshot metadata without applying it, for inspect/conflict decisions. */
     suspend fun inspect(source: File): SnapshotSummary? = withContext(Dispatchers.IO) {
         runCatching {
             val root = JSONObject(source.readText())
@@ -179,20 +188,52 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
                 tableCount = tables.length(),
                 rowCount = rows,
                 sizeBytes = source.length(),
-                createdAt = root.optLong("createdAt", 0)
+                createdAt = root.optLong("createdAt", 0),
+                contentHash = canonicalTablesHash(tables)
             )
         }.getOrNull()
     }
 
+    private fun decodeValue(row: JSONObject, column: String): Any? {
+        if (row.isNull(column)) return null
+        return when (val raw = row.get(column)) {
+            is String -> if (raw.startsWith(BLOB_PREFIX)) {
+                Base64.decode(raw.removePrefix(BLOB_PREFIX), Base64.NO_WRAP)
+            } else {
+                raw
+            }
+            is Number -> raw
+            is Boolean -> if (raw) 1L else 0L
+            else -> raw.toString()
+        }
+    }
+
     /**
-     * Orders tables so a parent is always written before anything that points at
-     * it. `tableNames()` is alphabetical, which puts `patient_documents` and
-     * `patient_images` ahead of `patients` — the exact order that made every
-     * import fail on a foreign key and roll back silently.
-     *
-     * Tables not named here keep their relative order and go last; they are
-     * either standalone or covered by the deferred-key pragma.
+     * Produces a deterministic SHA-256 over table contents only (excluding the volatile
+     * export timestamp) so unchanged databases do not produce duplicate uploads.
      */
+    private fun canonicalTablesHash(tables: JSONObject): String {
+        val canonical = buildString {
+            val tableNames = tables.keys().asSequence().toList().sorted()
+            for (table in tableNames) {
+                append(table).append('=')
+                val array = tables.optJSONArray(table) ?: continue
+                val rowStrings = ArrayList<String>(array.length())
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val sortedCols = obj.keys().asSequence().toList().sorted()
+                    rowStrings += sortedCols.joinToString("|") { col ->
+                        val v = if (obj.isNull(col)) "NULL" else obj.get(col).toString()
+                        "$col:$v"
+                    }
+                }
+                rowStrings.sort()
+                rowStrings.forEach { append(it).append('\n') }
+            }
+        }
+        return Hashing.sha256(canonical.toByteArray(Charsets.UTF_8))
+    }
+
     private fun insertionOrder(tables: List<String>): List<String> {
         val parentsFirst = listOf(
             "chapters",
@@ -227,6 +268,7 @@ class DatabaseSnapshot(private val database: OrthoDatabase) {
 
     companion object {
         private const val TAG = "DatabaseSnapshot"
+        private const val BLOB_PREFIX = "otblob:"
         const val FORMAT_VERSION = 1
     }
 }
@@ -235,5 +277,6 @@ data class SnapshotSummary(
     val tableCount: Int,
     val rowCount: Int,
     val sizeBytes: Long,
-    val createdAt: Long
+    val createdAt: Long,
+    val contentHash: String = ""
 )

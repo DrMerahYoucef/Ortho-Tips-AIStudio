@@ -231,7 +231,11 @@ class AppModule(private val context: Context) {
         )
     }
 
-    val databaseSnapshot: DatabaseSnapshot by lazy { DatabaseSnapshot(database) }
+    val databaseSnapshot: DatabaseSnapshot by lazy {
+        DatabaseSnapshot(database) {
+            com.example.widget.OrthoWidgetProvider.refreshAll(context)
+        }
+    }
 
     private val snapshotWorkDir: File by lazy {
         File(context.cacheDir, "snapshots").also { it.mkdirs() }

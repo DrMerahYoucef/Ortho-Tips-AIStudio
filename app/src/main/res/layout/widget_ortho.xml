@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <LinearLayout
         android:id="@+id/widget_header"
@@ -13,7 +13,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="6dp">
+        android:paddingBottom="8dp">
 
         <TextView
             android:id="@+id/widget_tab_shifts"
@@ -41,8 +41,8 @@
             android:paddingTop="7dp"
             android:paddingBottom="7dp"
             android:background="@drawable/widget_tab_unselected"
-            android:text="@string/widget_events_title"
-            android:textColor="#99FFFFFF"
+            android:text="@string/widget_events_tab"
+            android:textColor="#CCFFFFFF"
             android:textSize="12sp"
             android:maxLines="1"
             android:ellipsize="end" />
@@ -55,12 +55,12 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingBottom="6dp">
+        android:paddingBottom="8dp">
 
         <TextView
             android:id="@+id/widget_prev_day"
-            android:layout_width="30dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="28dp"
             android:gravity="center"
             android:text="@string/widget_prev_symbol"
             android:textColor="#FFFFFF"
@@ -73,15 +73,16 @@
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:textColor="#D0D8E0"
+            android:textColor="#E2E8F0"
             android:textSize="12sp"
+            android:textStyle="bold"
             android:maxLines="1"
             android:ellipsize="end" />
 
         <TextView
             android:id="@+id/widget_next_day"
-            android:layout_width="30dp"
-            android:layout_height="26dp"
+            android:layout_width="32dp"
+            android:layout_height="28dp"
             android:gravity="center"
             android:text="@string/widget_next_symbol"
             android:textColor="#FFFFFF"
@@ -94,7 +95,8 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:textColor="#B0BEC5"
+        android:padding="12dp"
+        android:textColor="#C5D0DA"
         android:textSize="13sp" />
 
     <ListView

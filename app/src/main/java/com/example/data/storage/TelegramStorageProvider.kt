@@ -8,6 +8,7 @@ import com.example.data.crypto.StreamCrypto
 import com.example.data.crypto.WrappedKeyRepository
 import com.example.data.local.dao.RemoteObjectDao
 import com.example.data.local.entity.RemoteObjectEntity
+import com.example.data.prefs.CachePolicy
 import com.example.data.prefs.TelegramDriveRepository
 import com.example.data.sync.DriveManifest
 import com.example.data.sync.ManifestCodec
@@ -103,12 +104,10 @@ class TelegramStorageProvider(
         val plainHash = Hashing.sha256(source)
         val existing = remoteObjectDao.get(key.value)
 
-        // Duplicate detection: identical bytes already at this key means the only
-        // work left is refreshing the cache, not spending the surgeon's data plan.
+        // Duplicate detection: identical bytes already at this key means nothing needs uploading.
         if (existing != null && existing.deletedAt == null &&
             plainHash != null && existing.contentHash == plainHash
         ) {
-            copyIntoCache(source, key)
             emit(TransferProgress.Completed(existing.toStorageObject()))
             return@flow
         }
@@ -174,7 +173,6 @@ class TelegramStorageProvider(
             }
 
             remoteObjectDao.upsert(row)
-            copyIntoCache(source, key)
 
             // The superseded message is removed only after the replacement is
             // confirmed, so an interrupted replace can never leave zero copies.
@@ -308,7 +306,7 @@ class TelegramStorageProvider(
     // ---- Metadata ------------------------------------------------------------
 
     override suspend fun exists(key: StorageKey): Boolean =
-        remoteObjectDao.get(key.value)?.deletedAt == null && remoteObjectDao.get(key.value) != null
+        remoteObjectDao.get(key.value)?.let { it.deletedAt == null } == true
 
     override suspend fun stat(key: StorageKey): StorageObject? =
         remoteObjectDao.get(key.value)?.takeIf { it.deletedAt == null }?.toStorageObject()
@@ -419,32 +417,46 @@ class TelegramStorageProvider(
     }
 
     /**
-     * Evicts least-recently-used cached files until the cache fits the budget.
-     * Canonical data is untouched — everything here is re-downloadable.
+     * Evicts cached files according to the configured [CachePolicy]. Canonical data
+     * under `filesDir` is untouched — everything in `cacheRoot` is re-downloadable.
      */
     suspend fun trimCacheTo(budgetBytes: Long): Long = withContext(Dispatchers.IO) {
+        val policy = driveRepository.current().cachePolicy
+        if (policy == CachePolicy.KEEP_EVERYTHING) return@withContext 0L
+
         val files = cacheRoot.walkTopDown().filter { it.isFile }.toMutableList()
-        var total = files.sumOf { it.length() }
-        if (total <= budgetBytes) return@withContext 0L
         var freed = 0L
-        files.sortBy { it.lastModified() }
-        for (file in files) {
-            if (total <= budgetBytes) break
-            val size = file.length()
-            if (file.delete()) {
-                total -= size
-                freed += size
+
+        if (policy == CachePolicy.MINIMAL) {
+            val iterator = files.iterator()
+            while (iterator.hasNext()) {
+                val file = iterator.next()
+                val rel = file.relativeToOrNull(cacheRoot)?.path?.replace(File.separatorChar, '/') ?: ""
+                val isThumbnail = rel.contains("/images/thumbs/")
+                if (!isThumbnail) {
+                    val size = file.length()
+                    if (file.delete()) {
+                        freed += size
+                        iterator.remove()
+                    }
+                }
             }
         }
-        DriveLog.d(TAG, "Trimmed $freed bytes from drive cache")
-        freed
-    }
 
-    private fun copyIntoCache(source: File, key: StorageKey) {
-        val cached = cacheFile(key)
-        cached.parentFile?.mkdirs()
-        runCatching { source.copyTo(cached, overwrite = true) }
-            .onFailure { DriveLog.w(TAG, "Could not cache ${key.fileName}", it) }
+        var total = files.sumOf { it.length() }
+        if (total > budgetBytes) {
+            files.sortBy { it.lastModified() }
+            for (file in files) {
+                if (total <= budgetBytes) break
+                val size = file.length()
+                if (file.delete()) {
+                    total -= size
+                    freed += size
+                }
+            }
+        }
+        if (freed > 0) DriveLog.d(TAG, "Trimmed $freed bytes from drive cache ($policy)")
+        freed
     }
 
     /**

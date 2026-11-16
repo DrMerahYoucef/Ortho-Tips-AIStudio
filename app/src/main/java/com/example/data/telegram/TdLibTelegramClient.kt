@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import com.example.BuildConfig
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
@@ -28,6 +29,8 @@ import org.drinkless.tdlib.Client
 import org.drinkless.tdlib.TdApi
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.time.Duration.Companion.milliseconds
@@ -509,57 +512,88 @@ class TdLibTelegramClient(
             true,
             TdApi.FormattedText(caption, emptyArray())
         )
-        val pending: TdApi.Message =
-            send(TdApi.SendMessage(chatId, null, null, null, null, content))
-        val pendingFileId = (pending.content as? TdApi.MessageDocument)?.document?.document?.id
-        var finished = false
-        var sentMessageId = pending.id
-        trySend(TelegramUploadEvent.Started(pending.id))
+        val finished = AtomicBoolean(false)
+        val pendingId = AtomicReference<Long?>(null)
+        val pendingFileId = AtomicReference<Int?>(null)
+        val sentMessageId = AtomicReference<Long?>(null)
+        val earlyLock = Any()
+        val earlyUpdates = mutableListOf<TdApi.Object>()
 
-        val job = launch {
-            updates.collect { update ->
-                when (update) {
-                    is TdApi.UpdateFile -> {
-                        if (pendingFileId != null && update.file.id == pendingFileId) {
-                            val total = update.file.size.takeIf { it > 0 }
-                                ?: update.file.expectedSize
-                            trySend(
-                                TelegramUploadEvent.Progress(
-                                    update.file.remote?.uploadedSize ?: 0,
-                                    total
-                                )
+        fun processUpdate(update: TdApi.Object, expectedId: Long, expectedFileId: Int?) {
+            when (update) {
+                is TdApi.UpdateFile -> {
+                    if (expectedFileId != null && update.file.id == expectedFileId) {
+                        val total = update.file.size.takeIf { it > 0 }
+                            ?: update.file.expectedSize
+                        trySend(
+                            TelegramUploadEvent.Progress(
+                                update.file.remote?.uploadedSize ?: 0,
+                                total
                             )
+                        )
+                    }
+                }
+
+                is TdApi.UpdateMessageSendSucceeded -> {
+                    if (update.oldMessageId == expectedId) {
+                        sentMessageId.set(update.message.id)
+                        val document = update.message.toRemoteDocument()
+                        finished.set(true)
+                        if (document != null) {
+                            trySend(TelegramUploadEvent.Completed(document))
+                            close()
+                        } else {
+                            close(TelegramException(500, "Sent message is not a document"))
                         }
                     }
+                }
 
-                    is TdApi.UpdateMessageSendSucceeded -> {
-                        if (update.oldMessageId == pending.id) {
-                            sentMessageId = update.message.id
-                            val document = update.message.toRemoteDocument()
-                            finished = true
-                            if (document != null) {
-                                trySend(TelegramUploadEvent.Completed(document))
-                                close()
-                            } else {
-                                close(TelegramException(500, "Sent message is not a document"))
-                            }
-                        }
-                    }
-
-                    is TdApi.UpdateMessageSendFailed -> {
-                        if (update.oldMessageId == pending.id) {
-                            finished = true
-                            close(TelegramException.from(update.error.code, update.error.message))
-                        }
+                is TdApi.UpdateMessageSendFailed -> {
+                    if (update.oldMessageId == expectedId) {
+                        finished.set(true)
+                        close(TelegramException.from(update.error.code, update.error.message))
                     }
                 }
             }
         }
 
+        // Subscribe before SendMessage so fast TDLib updates are buffered instead of missed.
+        val job = launch(start = CoroutineStart.UNDISPATCHED) {
+            updates.collect { update ->
+                val activeId = pendingId.get()
+                if (activeId == null) {
+                    synchronized(earlyLock) {
+                        val lockedId = pendingId.get()
+                        if (lockedId == null) {
+                            earlyUpdates.add(update)
+                        } else {
+                            processUpdate(update, lockedId, pendingFileId.get())
+                        }
+                    }
+                } else {
+                    processUpdate(update, activeId, pendingFileId.get())
+                }
+            }
+        }
+
+        val pending: TdApi.Message =
+            send(TdApi.SendMessage(chatId, null, null, null, null, content))
+        val resolvedFileId = (pending.content as? TdApi.MessageDocument)?.document?.document?.id
+        sentMessageId.set(pending.id)
+        trySend(TelegramUploadEvent.Started(pending.id))
+
+        val buffered = synchronized(earlyLock) {
+            pendingFileId.set(resolvedFileId)
+            pendingId.set(pending.id)
+            earlyUpdates.toList().also { earlyUpdates.clear() }
+        }
+        buffered.forEach { processUpdate(it, pending.id, resolvedFileId) }
+
         awaitClose {
             job.cancel()
-            if (!finished) {
-                client?.send(TdApi.DeleteMessages(chatId, longArrayOf(sentMessageId), true)) { }
+            val messageToDelete = sentMessageId.get()
+            if (!finished.get() && messageToDelete != null) {
+                client?.send(TdApi.DeleteMessages(chatId, longArrayOf(messageToDelete), true)) { }
             }
         }
     }.buffer(capacity = 64)
@@ -576,14 +610,26 @@ class TdLibTelegramClient(
             }
 
             val fileId = file.id
-            val job = launch {
+            // TDLib can report a completed local copy whose bytes were already
+            // evicted. Dropping the stale record forces a real re-download.
+            if (file.local?.isDownloadingCompleted == true) {
+                runCatching { send<TdApi.Ok>(TdApi.DeleteFile(fileId)) }
+            }
+
+            val sawActive = AtomicBoolean(false)
+            val job = launch(start = CoroutineStart.UNDISPATCHED) {
                 updates.filterIsInstance<TdApi.UpdateFile>()
                     .filter { it.file.id == fileId }
                     .collect { update ->
+                        if (update.file.local?.isDownloadingActive == true) {
+                            sawActive.set(true)
+                        }
                         val readyPath = update.file.readyPath()
                         if (readyPath != null) {
                             trySend(TelegramDownloadEvent.Completed(readyPath, update.file.size))
                             close()
+                        } else if (sawActive.get() && update.file.local?.isDownloadingActive == false) {
+                            close(TelegramException(500, "Download stopped before completion"))
                         } else {
                             trySend(
                                 TelegramDownloadEvent.Progress(
@@ -595,14 +641,11 @@ class TdLibTelegramClient(
                     }
             }
 
-            // TDLib can report a completed local copy whose bytes were already
-            // evicted. Dropping the stale record forces a real re-download.
-            if (file.local?.isDownloadingCompleted == true) {
-                runCatching { send<TdApi.Ok>(TdApi.DeleteFile(fileId)) }
-            }
-
             val started: TdApi.File =
                 send(TdApi.DownloadFile(fileId, DOWNLOAD_PRIORITY, 0, 0, false))
+            if (started.local?.isDownloadingActive == true) {
+                sawActive.set(true)
+            }
             started.readyPath()?.let { path ->
                 trySend(TelegramDownloadEvent.Completed(path, started.size))
                 close()

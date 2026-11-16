@@ -8,7 +8,6 @@ import com.example.data.telegram.RemoteDocument
 import com.example.data.telegram.TelegramClient
 import com.example.data.telegram.TelegramUploadEvent
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -75,7 +74,6 @@ class PassphraseKeyBackup(
         var pages = 0
         while (pages++ < MAX_PAGES) {
             val page = client.fetchDocuments(chatId, from, PAGE_SIZE)
-            if (page.documents.isEmpty()) break
             for (doc in page.documents) {
                 val caption = doc.caption
                 when {
@@ -128,14 +126,19 @@ class PassphraseKeyBackup(
                 "without it the drive cannot be opened on another phone.\n"
         )
         val uploaded = try {
-            val completed = client.uploadDocument(
+            var doc: RemoteDocument? = null
+            client.uploadDocument(
                 chatId = chatId,
                 localPath = file.absolutePath,
                 fileName = "ortho-tips-key-backup.txt",
                 mimeType = "text/plain",
                 caption = caption
-            ).first { it is TelegramUploadEvent.Completed } as TelegramUploadEvent.Completed
-            completed.document
+            ).collect { event ->
+                if (event is TelegramUploadEvent.Completed) {
+                    doc = event.document
+                }
+            }
+            doc ?: throw PassphraseException("Key backup upload did not complete")
         } finally {
             file.delete()
         }

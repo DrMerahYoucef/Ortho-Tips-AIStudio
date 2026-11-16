@@ -28,6 +28,9 @@ interface RemoteObjectDao {
     @Query("SELECT * FROM remote_objects WHERE deletedAt IS NULL ORDER BY modifiedAt DESC")
     suspend fun getAllLive(): List<RemoteObjectEntity>
 
+    @Query("SELECT * FROM remote_objects WHERE deletedAt IS NOT NULL")
+    suspend fun getAllDeleted(): List<RemoteObjectEntity>
+
     @Query(
         "SELECT * FROM remote_objects WHERE storageKey LIKE :prefix || '%' " +
                 "AND deletedAt IS NULL ORDER BY storageKey"
@@ -116,6 +119,12 @@ interface TransferQueueDao {
 
     @Query("DELETE FROM transfer_queue WHERE state = 'SUCCEEDED' AND updatedAt < :cutoff")
     suspend fun trimHistory(cutoff: Long): Int
+
+    @Query(
+        "UPDATE transfer_queue SET state = 'CANCELLED', updatedAt = :now " +
+                "WHERE storageKey = :storageKey AND state IN ('PENDING', 'RUNNING')"
+    )
+    suspend fun cancelActiveFor(storageKey: String, now: Long = System.currentTimeMillis())
 
     @Query("DELETE FROM transfer_queue WHERE id = :id")
     suspend fun delete(id: Long)

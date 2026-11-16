@@ -170,19 +170,24 @@ class PatientRepository(
 
     suspend fun saveTimelineEvent(event: TimelineEventEntity) = withContext(Dispatchers.IO) {
         timelineDao.insertEvent(event.copy(updatedAt = System.currentTimeMillis()))
+        patientDao.touchUpdatedAt(event.patientId)
         mediaGateway?.onRecordsChanged()
         refreshWidget()
     }
 
     suspend fun setAttendance(eventId: String, attendance: com.example.data.local.entity.Attendance) =
         withContext(Dispatchers.IO) {
+            val event = timelineDao.getEventDirect(eventId)
             timelineDao.setAttendance(eventId, attendance.name)
+            event?.patientId?.let { patientDao.touchUpdatedAt(it) }
             mediaGateway?.onRecordsChanged()
             refreshWidget()
         }
 
     suspend fun deleteTimelineEvent(eventId: String) = withContext(Dispatchers.IO) {
+        val event = timelineDao.getEventDirect(eventId)
         timelineDao.deleteEvent(eventId)
+        event?.patientId?.let { patientDao.touchUpdatedAt(it) }
         mediaGateway?.onRecordsChanged()
         refreshWidget()
     }
@@ -198,11 +203,14 @@ class PatientRepository(
 
     suspend fun saveSurgery(surgery: SurgeryEntity) = withContext(Dispatchers.IO) {
         surgeryDao.insertSurgery(surgery.copy(updatedAt = System.currentTimeMillis()))
+        patientDao.touchUpdatedAt(surgery.patientId)
         mediaGateway?.onRecordsChanged()
     }
 
     suspend fun deleteSurgery(surgeryId: String) = withContext(Dispatchers.IO) {
+        val surgery = surgeryDao.getSurgeryDirect(surgeryId)
         surgeryDao.deleteSurgery(surgeryId)
+        surgery?.patientId?.let { patientDao.touchUpdatedAt(it) }
         mediaGateway?.onRecordsChanged()
     }
 
@@ -223,6 +231,7 @@ class PatientRepository(
 
     suspend fun saveImage(image: PatientImageEntity) = withContext(Dispatchers.IO) {
         imageDao.insertImage(image)
+        patientDao.touchUpdatedAt(image.patientId)
         // Queued after the row is committed, so a transfer can never reference an
         // image the database does not yet know about.
         mediaGateway?.onImageSaved(image)
@@ -232,9 +241,11 @@ class PatientRepository(
         val image = imageDao.getImageDirect(imageId)
         imageDao.deleteImage(imageId)
         image?.let {
+            patientDao.touchUpdatedAt(it.patientId)
             val gateway = mediaGateway
             if (gateway != null) {
                 gateway.onImageDeleted(it)
+                gateway.onRecordsChanged()
             } else {
                 File(it.filePath).delete()
                 it.thumbnailPath?.let { path -> File(path).delete() }
@@ -350,6 +361,7 @@ class PatientRepository(
 
     suspend fun saveDocument(document: PatientDocumentEntity) = withContext(Dispatchers.IO) {
         documentDao.insertDocument(document)
+        patientDao.touchUpdatedAt(document.patientId)
         mediaGateway?.onDocumentSaved(document)
     }
 
@@ -357,8 +369,14 @@ class PatientRepository(
         val document = documentDao.getDocumentDirect(documentId)
         documentDao.deleteDocument(documentId)
         document?.let {
+            patientDao.touchUpdatedAt(it.patientId)
             val gateway = mediaGateway
-            if (gateway != null) gateway.onDocumentDeleted(it) else File(it.filePath).delete()
+            if (gateway != null) {
+                gateway.onDocumentDeleted(it)
+                gateway.onRecordsChanged()
+            } else {
+                File(it.filePath).delete()
+            }
         }
     }
 

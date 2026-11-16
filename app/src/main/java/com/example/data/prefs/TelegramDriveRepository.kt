@@ -93,7 +93,9 @@ data class TelegramDriveSettings(
     /** Creation time of the newest snapshot this device uploaded. */
     val snapshotPushedAt: Long = 0,
     /** Creation time of the newest snapshot this device merged in. */
-    val snapshotImportedAt: Long = 0
+    val snapshotImportedAt: Long = 0,
+    /** Deterministic content hash of the newest pushed or imported snapshot tables. */
+    val lastSnapshotHash: String = ""
 )
 
 class TelegramDriveRepository(
@@ -121,6 +123,7 @@ class TelegramDriveRepository(
         val RECORDS_DIRTY_AT = longPreferencesKey("records_dirty_at")
         val SNAPSHOT_PUSHED_AT = longPreferencesKey("snapshot_pushed_at")
         val SNAPSHOT_IMPORTED_AT = longPreferencesKey("snapshot_imported_at")
+        val LAST_SNAPSHOT_HASH = stringPreferencesKey("last_snapshot_hash")
         val LAST_SYNC_ERROR = stringPreferencesKey("last_sync_error")
     }
 
@@ -146,7 +149,8 @@ class TelegramDriveRepository(
             lastSyncError = prefs[Keys.LAST_SYNC_ERROR].orEmpty(),
             recordsDirtyAt = prefs[Keys.RECORDS_DIRTY_AT] ?: 0,
             snapshotPushedAt = prefs[Keys.SNAPSHOT_PUSHED_AT] ?: 0,
-            snapshotImportedAt = prefs[Keys.SNAPSHOT_IMPORTED_AT] ?: 0
+            snapshotImportedAt = prefs[Keys.SNAPSHOT_IMPORTED_AT] ?: 0,
+            lastSnapshotHash = prefs[Keys.LAST_SNAPSHOT_HASH].orEmpty()
         )
     }
 
@@ -217,14 +221,17 @@ class TelegramDriveRepository(
     suspend fun markRecordsDirty(at: Long = System.currentTimeMillis()) =
         edit { it[Keys.RECORDS_DIRTY_AT] = at }
 
-    suspend fun markSnapshotPushed(createdAt: Long) = edit { prefs ->
+    suspend fun markSnapshotPushed(createdAt: Long, contentHash: String = "") = edit { prefs ->
         prefs[Keys.SNAPSHOT_PUSHED_AT] = createdAt
+        if (contentHash.isNotBlank()) prefs[Keys.LAST_SNAPSHOT_HASH] = contentHash
         // Anything edited before this snapshot was taken is now safely up.
         prefs[Keys.RECORDS_DIRTY_AT] = 0
     }
 
-    suspend fun markSnapshotImported(createdAt: Long) =
-        edit { it[Keys.SNAPSHOT_IMPORTED_AT] = createdAt }
+    suspend fun markSnapshotImported(createdAt: Long, contentHash: String = "") = edit { prefs ->
+        prefs[Keys.SNAPSHOT_IMPORTED_AT] = createdAt
+        if (contentHash.isNotBlank()) prefs[Keys.LAST_SNAPSHOT_HASH] = contentHash
+    }
 
     /** True when local record edits have not reached the drive yet. */
     suspend fun hasUnpushedRecords(): Boolean {

@@ -65,6 +65,9 @@ interface PatientDao {
     @Query("UPDATE patients SET isArchived = :archived, updatedAt = :timestamp WHERE id = :id")
     suspend fun setArchived(id: String, archived: Boolean, timestamp: Long = System.currentTimeMillis())
 
+    @Query("UPDATE patients SET updatedAt = :updatedAt WHERE id = :id")
+    suspend fun touchUpdatedAt(id: String, updatedAt: Long = System.currentTimeMillis())
+
     @Query("DELETE FROM patients WHERE id = :id")
     suspend fun deletePatient(id: String)
 

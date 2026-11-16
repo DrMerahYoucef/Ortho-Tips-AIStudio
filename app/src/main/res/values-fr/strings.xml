@@ -647,6 +647,7 @@
     <string name="widget_events_title">Demain</string>
     <string name="widget_switch">Changer</string>
     <string name="widget_no_shifts">Aucune garde à venir</string>
+    <string name="widget_no_events_today">Rien de prévu aujourd’hui</string>
     <string name="widget_no_events">Rien de prévu demain</string>
     <string name="widget_today">De garde aujourd’hui</string>
     <string name="widget_tomorrow">Demain</string>

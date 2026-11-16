@@ -47,12 +47,12 @@ object WidgetTheme {
         tabSelected = R.drawable.widget_tab_selected,
         tabUnselected = R.drawable.widget_tab_unselected,
         tabSelectedText = 0xFFFFFFFF.toInt(),
-        tabDimmedText = 0x99FFFFFF.toInt(),
+        tabDimmedText = 0xCCFFFFFF.toInt(),
         arrow = 0xFFFFFFFF.toInt(),
-        dayLabel = 0xFFD0D8E0.toInt(),
+        dayLabel = 0xFFE2E8F0.toInt(),
         title = 0xFFFFFFFF.toInt(),
-        subtitle = 0xFFB0BEC5.toInt(),
-        empty = 0xFFB0BEC5.toInt()
+        subtitle = 0xFFC5D0DA.toInt(),
+        empty = 0xFFC5D0DA.toInt()
     )
 
     private val LIGHT = Palette(
@@ -61,12 +61,12 @@ object WidgetTheme {
         tabSelected = R.drawable.widget_tab_selected,
         tabUnselected = R.drawable.widget_tab_unselected_light,
         tabSelectedText = 0xFFFFFFFF.toInt(),
-        tabDimmedText = 0x991B1D22.toInt(),
-        arrow = 0xFF1B1D22.toInt(),
-        dayLabel = 0xFF37424D.toInt(),
-        title = 0xFF1B1D22.toInt(),
-        subtitle = 0xFF5F6B76.toInt(),
-        empty = 0xFF5F6B76.toInt()
+        tabDimmedText = 0xB314181F.toInt(),
+        arrow = 0xFF14181F.toInt(),
+        dayLabel = 0xFF28323D.toInt(),
+        title = 0xFF14181F.toInt(),
+        subtitle = 0xFF475360.toInt(),
+        empty = 0xFF475360.toInt()
     )
 
     fun palette(dark: Boolean): Palette = if (dark) DARK else LIGHT

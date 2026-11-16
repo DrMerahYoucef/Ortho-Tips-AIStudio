@@ -18,7 +18,9 @@ import com.example.OrthoApplication
 import com.example.data.local.entity.TransferDirection
 import com.example.data.local.entity.TransferQueueEntity
 import com.example.data.local.entity.TransferState
+import com.example.data.prefs.CachePolicy
 import com.example.data.prefs.SyncFrequency
+import com.example.data.storage.StorageBackend
 import com.example.data.storage.StorageKey
 import com.example.data.storage.StorageObjectKind
 import com.example.data.storage.TransferProgress
@@ -153,10 +155,21 @@ class TransferQueueWorker(
                             updatedAt = System.currentTimeMillis()
                         )
                     )
-                    // A download lands in the local tree, so the local provider
-                    // now serves it and the next sync sees the two sides agree.
+                    // A download lands in the local tree with the remote modifiedAt timestamp,
+                    // so the next incremental sync recognises both sides already match.
                     if (direction == TransferDirection.DOWNLOAD) {
+                        if (outcome.obj.modifiedAt > 0) file.setLastModified(outcome.obj.modifiedAt)
                         DriveLog.d(TAG, "Fetched ${key.fileName} into local storage")
+                    } else if (
+                        driveSettings.cachePolicy == CachePolicy.MINIMAL &&
+                        !kind.isThumbnail &&
+                        key.value.startsWith(StorageKey.PATIENTS_PREFIX) &&
+                        !file.name.endsWith(".original.jpg") &&
+                        module.patientMediaGateway.isBackedUp(file.absolutePath)
+                    ) {
+                        if (file.delete()) {
+                            DriveLog.d(TAG, "Offloaded ${key.fileName} under MINIMAL cache policy")
+                        }
                     }
                 }
 
@@ -265,6 +278,12 @@ class SyncWorker(
         if (!settings.setupCompleted) return Result.success()
         DriveLog.d(TAG, "Sync worker started")
 
+        if (settings.backend == StorageBackend.TELEGRAM && !module.telegramStorageProvider.isReady()) {
+            withTimeoutOrNull(READY_WAIT_MILLIS) {
+                module.telegramClient.authState.first { it == TelegramAuthState.Ready }
+            }
+        }
+
         val scope = if (inputData.getBoolean(INPUT_FULL, false)) {
             SyncScope.FULL
         } else {
@@ -283,7 +302,7 @@ class SyncWorker(
 
         if (!report.succeeded) {
             DriveLog.w(TAG, "Sync reported ${report.errors.size} errors")
-            return Result.retry()
+            return if (report.hasRetryableFailure) Result.retry() else Result.success()
         }
 
         module.syncEngine.cleanUp(CLEANUP_RETENTION_MILLIS)
@@ -295,6 +314,7 @@ class SyncWorker(
         const val UNIQUE_PERIODIC = "ortho_drive_periodic_sync"
         const val UNIQUE_ONE_SHOT = "ortho_drive_sync_now"
         const val INPUT_FULL = "full_sync"
+        private const val READY_WAIT_MILLIS = 90_000L
         private const val CLEANUP_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000
     }
 }
@@ -364,11 +384,9 @@ class SyncScheduler(private val context: Context) {
      * keystroke. Each new call pushes the timer out, so a burst of edits settles
      * into one upload.
      */
-    fun scheduleRecordSnapshot() {
+    fun scheduleRecordSnapshot(wifiOnly: Boolean = false, chargingOnly: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-            )
+            .setConstraints(constraints(wifiOnly, chargingOnly))
             .setInitialDelay(RECORD_DEBOUNCE_SECONDS, TimeUnit.SECONDS)
             .build()
         workManager.enqueueUniqueWork(

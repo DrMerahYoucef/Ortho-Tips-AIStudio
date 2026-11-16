@@ -140,6 +140,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         setIntent(intent)
         // An extension's notification tapped while the app is running.
         com.example.ui.screens.extensions.ExtensionNotificationRouter.post(intent)
+        postWidgetOpenIfPresent(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -147,8 +148,11 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         enableEdgeToEdge()
 
         val appModule = (application as OrthoApplication).appModule
-        // Opened by tapping an extension's notification.
-        if (savedInstanceState == null) com.example.ui.screens.extensions.ExtensionNotificationRouter.post(intent)
+        // Opened by tapping an extension's notification or a widget appointment.
+        if (savedInstanceState == null) {
+            com.example.ui.screens.extensions.ExtensionNotificationRouter.post(intent)
+            postWidgetOpenIfPresent(intent)
+        }
 
         // The home-screen widget cannot read the DataStore in time, so hand it the
         // theme choice each time it changes (and once at launch for older installs).
@@ -222,6 +226,20 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 }
             }
         }
+    }
+
+    private fun postWidgetOpenIfPresent(intent: Intent?) {
+        val eventId = intent?.getStringExtra(com.example.widget.OrthoWidgetProvider.EXTRA_OPEN_EVENT)
+        val patientId = intent?.getStringExtra(com.example.widget.OrthoWidgetProvider.EXTRA_PATIENT_ID)
+        if (!eventId.isNullOrBlank() && !patientId.isNullOrBlank()) {
+            intent.removeExtra(com.example.widget.OrthoWidgetProvider.EXTRA_OPEN_EVENT)
+            intent.removeExtra(com.example.widget.OrthoWidgetProvider.EXTRA_PATIENT_ID)
+            pendingWidgetOpen.value = patientId to eventId
+        }
+    }
+
+    companion object {
+        internal val pendingWidgetOpen = kotlinx.coroutines.flow.MutableStateFlow<Pair<String, String>?>(null)
     }
 }
 
@@ -338,17 +356,15 @@ fun OrthoAppNavHost(appModule: AppModule) {
             }
         }
     }
+    val widgetTarget by MainActivity.pendingWidgetOpen.collectAsStateWithLifecycle()
+    LaunchedEffect(navController, widgetTarget) {
+        val (patientId, eventId) = widgetTarget ?: return@LaunchedEffect
+        MainActivity.pendingWidgetOpen.value = null
+        navController.navigate(OrthoDestinations.timelineEventEdit(patientId, eventId))
+    }
     val hostActivity = currentFragmentActivity()
     LaunchedEffect(hostActivity) {
         val intent = hostActivity?.intent ?: return@LaunchedEffect
-        val eventId = intent.getStringExtra(com.example.widget.OrthoWidgetProvider.EXTRA_OPEN_EVENT)
-        val patientId = intent.getStringExtra(com.example.widget.OrthoWidgetProvider.EXTRA_PATIENT_ID)
-        if (!eventId.isNullOrBlank() && !patientId.isNullOrBlank()) {
-            // Clear it so rotating the phone does not reopen the same appointment.
-            intent.removeExtra(com.example.widget.OrthoWidgetProvider.EXTRA_OPEN_EVENT)
-            // Main is the start screen, so the appointment simply opens on top of it.
-            navController.navigate(OrthoDestinations.timelineEventEdit(patientId, eventId))
-        }
         // A bank SMS notification opens the extension that handles it.
         intent.getStringExtra(com.example.data.sms.BankSmsInbox.EXTRA_OPEN_EXTENSION)?.let { extensionId ->
             intent.removeExtra(com.example.data.sms.BankSmsInbox.EXTRA_OPEN_EXTENSION)

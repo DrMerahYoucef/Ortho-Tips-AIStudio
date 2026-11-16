@@ -8,6 +8,7 @@ import com.example.data.local.entity.SyncTombstoneEntity
 import com.example.data.local.entity.TransferDirection
 import com.example.data.local.entity.TransferQueueEntity
 import com.example.data.local.entity.TransferState
+import com.example.data.prefs.CachePolicy
 import com.example.data.prefs.TelegramDriveRepository
 import com.example.data.storage.LocalStorageProvider
 import com.example.data.storage.StorageBackend
@@ -21,6 +22,8 @@ import com.example.data.storage.TransferProgress
 import com.example.data.telegram.DriveLog
 import com.example.data.telegram.TelegramClient
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -68,6 +71,7 @@ data class SyncReport(
     val snapshotPulled: Boolean = false,
     val conflicts: List<SyncConflict> = emptyList(),
     val errors: List<String> = emptyList(),
+    val hasRetryableFailure: Boolean = false,
     val startedAt: Long = System.currentTimeMillis(),
     val finishedAt: Long = System.currentTimeMillis()
 ) {
@@ -104,81 +108,118 @@ class SyncEngine(
     private val snapshotWorkDir: File
 ) {
 
+    private val syncMutex = Mutex()
+
     suspend fun sync(
         scope: SyncScope = SyncScope.INCREMENTAL,
         policy: ConflictPolicy = ConflictPolicy.NEWEST_WINS
     ): SyncReport = withContext(Dispatchers.IO) {
-        val startedAt = System.currentTimeMillis()
-        val errors = mutableListOf<String>()
-        DriveLog.i(TAG, "Sync ${scope.name.lowercase()} started")
+        syncMutex.withLock {
+            val startedAt = System.currentTimeMillis()
+            val errors = mutableListOf<String>()
+            var retryableFailure = false
+            DriveLog.i(TAG, "Sync ${scope.name.lowercase()} started")
 
-        if (driveRepository.backend() != StorageBackend.TELEGRAM) {
-            DriveLog.w(TAG, "Sync skipped: Telegram Drive is not the selected backend")
-            return@withContext SyncReport(
+            if (driveRepository.backend() != StorageBackend.TELEGRAM) {
+                DriveLog.w(TAG, "Sync skipped: Telegram Drive is not the selected backend")
+                return@withLock SyncReport(
+                    scope = scope,
+                    errors = listOf("Telegram Drive is not the selected backend"),
+                    hasRetryableFailure = false,
+                    startedAt = startedAt
+                )
+            }
+            if (!telegram.isReady()) {
+                DriveLog.w(TAG, "Sync skipped: Telegram Drive is not connected")
+                return@withLock SyncReport(
+                    scope = scope,
+                    errors = listOf("Telegram Drive is not connected"),
+                    hasRetryableFailure = true,
+                    startedAt = startedAt
+                )
+            }
+
+            // Anything left RUNNING belongs to a process that no longer exists.
+            transferQueueDao.requeueInterrupted(System.currentTimeMillis())
+
+            val pulled = runCatching { pullManifest(scope) }
+                .onFailure { err ->
+                    errors += "Manifest pull failed: ${err.message}"
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+                .getOrDefault(ManifestPull())
+
+            if (pulled.unreadable > 0) {
+                errors += "${pulled.unreadable} drive objects are encrypted with a key " +
+                        "that is not on this device"
+            }
+
+            val tombstones = runCatching { propagateTombstones() }
+                .onFailure { err ->
+                    errors += "Deletion propagation failed: ${err.message}"
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+                .getOrDefault(0)
+
+            runCatching { reconcileRemoteDeletions() }
+                .onFailure { err ->
+                    errors += "Remote deletion sync failed: ${err.message}"
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+
+            val plan = runCatching { planTransfers(scope, policy) }
+                .onFailure { err ->
+                    errors += "Planning failed: ${err.message}"
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+                .getOrDefault(TransferPlan())
+
+            val snapshotPulled = runCatching { pullNewerSnapshotIfAvailable() }
+                .onFailure { err ->
+                    errors += "Record restore failed: ${err.message}"
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+                .getOrDefault(false)
+
+            val snapshotPushed = runCatching { pushDatabaseSnapshot() }
+                .onFailure { err ->
+                    errors += "Record snapshot failed: ${err.message}"
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+                .getOrDefault(false)
+
+            val finishedAt = System.currentTimeMillis()
+            val report = SyncReport(
                 scope = scope,
-                errors = listOf("Telegram Drive is not the selected backend"),
-                startedAt = startedAt
+                uploadsQueued = plan.uploads,
+                downloadsQueued = plan.downloads,
+                manifestRowsSeen = pulled.seen,
+                unreadableObjects = pulled.unreadable,
+                tombstonesPropagated = tombstones,
+                snapshotPushed = snapshotPushed,
+                snapshotPulled = snapshotPulled,
+                conflicts = plan.conflicts,
+                errors = errors,
+                hasRetryableFailure = retryableFailure,
+                startedAt = startedAt,
+                finishedAt = finishedAt
             )
-        }
-        if (!telegram.isReady()) {
-            DriveLog.w(TAG, "Sync skipped: Telegram Drive is not connected")
-            return@withContext SyncReport(
-                scope = scope,
-                errors = listOf("Telegram Drive is not connected"),
-                startedAt = startedAt
+            if (report.succeeded) {
+                driveRepository.recordSyncSuccess(finishedAt)
+            } else {
+                driveRepository.recordSyncFailure(errors.first())
+            }
+            DriveLog.i(
+                TAG,
+                "Sync ${scope.name.lowercase()} done in ${report.durationMillis}ms: " +
+                        "${plan.uploads} up, ${plan.downloads} down, ${errors.size} errors"
             )
+            report
         }
-
-        // Anything left RUNNING belongs to a process that no longer exists.
-        transferQueueDao.requeueInterrupted(System.currentTimeMillis())
-
-        val pulled = runCatching { pullManifest(scope) }
-            .onFailure { errors += "Manifest pull failed: ${it.message}" }
-            .getOrDefault(ManifestPull())
-
-        if (pulled.unreadable > 0) {
-            errors += "${pulled.unreadable} drive objects are encrypted with a key " +
-                    "that is not on this device"
-        }
-
-        val tombstones = runCatching { propagateTombstones() }
-            .onFailure { errors += "Deletion propagation failed: ${it.message}" }
-            .getOrDefault(0)
-
-        val plan = runCatching { planTransfers(scope, policy) }
-            .onFailure { errors += "Planning failed: ${it.message}" }
-            .getOrDefault(TransferPlan())
-
-        val snapshotPushed = runCatching { pushDatabaseSnapshot() }
-            .onFailure { errors += "Record snapshot failed: ${it.message}" }
-            .getOrDefault(false)
-
-        val finishedAt = System.currentTimeMillis()
-        val report = SyncReport(
-            scope = scope,
-            uploadsQueued = plan.uploads,
-            downloadsQueued = plan.downloads,
-            manifestRowsSeen = pulled.seen,
-            unreadableObjects = pulled.unreadable,
-            tombstonesPropagated = tombstones,
-            snapshotPushed = snapshotPushed,
-            conflicts = plan.conflicts,
-            errors = errors,
-            startedAt = startedAt,
-            finishedAt = finishedAt
-        )
-        if (report.succeeded) {
-            driveRepository.recordSyncSuccess(finishedAt)
-        } else {
-            driveRepository.recordSyncFailure(errors.first())
-        }
-        DriveLog.i(
-            TAG,
-            "Sync ${scope.name.lowercase()} done in ${report.durationMillis}ms: " +
-                    "${plan.uploads} up, ${plan.downloads} down, ${errors.size} errors"
-        )
-        report
     }
+
+    private fun isRetryableError(error: Throwable): Boolean =
+        (error as? StorageException)?.retryable ?: true
 
     // ---- Pull ----------------------------------------------------------------
 
@@ -203,7 +244,6 @@ class SyncEngine(
 
         while (pages < MAX_PAGES) {
             val page = client.fetchDocuments(chatId, fromMessageId, PAGE_SIZE)
-            if (page.documents.isEmpty()) break
             var changedInPage = 0
 
             for (document in page.documents) {
@@ -221,11 +261,18 @@ class SyncEngine(
                 }
                 seen++
                 val existing = remoteObjectDao.get(manifest.storageKey)
+                // Messages walk newest-first; ignore older revisions when version history is kept.
+                if (existing != null &&
+                    (manifest.revision < existing.revision ||
+                        (manifest.revision == existing.revision && document.messageId < existing.messageId))
+                ) {
+                    continue
+                }
                 val unchanged = existing != null &&
                         existing.messageId == document.messageId &&
                         existing.revision == manifest.revision &&
                         existing.contentHash == manifest.contentHash &&
-                        (existing.deletedAt != null) == (manifest.deletedAt != null)
+                        existing.deletedAt == manifest.deletedAt
                 if (unchanged) continue
 
                 changedInPage++
@@ -252,7 +299,9 @@ class SyncEngine(
             pages++
             fromMessageId = page.nextFromMessageId
             if (fromMessageId == 0L) break
-            if (scope == SyncScope.INCREMENTAL && changedInPage == 0 && pages > 1) break
+            if (scope == SyncScope.INCREMENTAL && page.documents.isNotEmpty() && changedInPage == 0 && pages > 1) {
+                break
+            }
         }
         DriveLog.i(
             TAG,
@@ -275,9 +324,11 @@ class SyncEngine(
      * caption manifest exists at all.
      */
     suspend fun rebuildManifest(): Int = withContext(Dispatchers.IO) {
-        DriveLog.i(TAG, "Rebuilding manifest index from the drive channel")
-        remoteObjectDao.clear()
-        pullManifest(SyncScope.FULL).seen
+        syncMutex.withLock {
+            DriveLog.i(TAG, "Rebuilding manifest index from the drive channel")
+            remoteObjectDao.clear()
+            pullManifest(SyncScope.FULL).seen
+        }
     }
 
     // ---- Planning ------------------------------------------------------------
@@ -289,6 +340,7 @@ class SyncEngine(
     )
 
     private suspend fun planTransfers(scope: SyncScope, policy: ConflictPolicy): TransferPlan {
+        val cachePolicy = driveRepository.current().cachePolicy
         val localObjects = local.list(StorageKey.PATIENTS_PREFIX).associateBy { it.key.value }
         val remoteObjects = remoteObjectDao.getAllLive().associateBy { it.storageKey }
         val conflicts = mutableListOf<SyncConflict>()
@@ -297,8 +349,15 @@ class SyncEngine(
 
         // Local content the drive does not have, or has an older version of.
         for ((keyValue, localObject) in localObjects) {
-            if (tombstoneDao.get(keyValue) != null) continue
             val remote = remoteObjects[keyValue]
+            val tombstone = tombstoneDao.get(keyValue)
+            if (tombstone != null) {
+                if (tombstone.reason == REMOTE_DELETION_REASON && remote != null) {
+                    tombstoneDao.delete(keyValue)
+                } else {
+                    continue
+                }
+            }
             val localFile = local.peek(localObject.key) ?: continue
 
             if (remote == null) {
@@ -306,10 +365,14 @@ class SyncEngine(
                 continue
             }
 
-            val localHash = if (scope == SyncScope.FULL || remote.sizeBytes != localFile.length()) {
+            val localHash = if (
+                scope == SyncScope.FULL ||
+                remote.sizeBytes != localFile.length() ||
+                localFile.lastModified() != remote.modifiedAt
+            ) {
                 Hashing.sha256(localFile)
             } else {
-                null // same size and incremental: trust the index rather than re-hash
+                null // exact size and mtime match on incremental sync
             }
             val identical = localHash != null && localHash == remote.contentHash
             if (identical) continue
@@ -339,15 +402,30 @@ class SyncEngine(
             }
         }
 
-        // Drive content this device has never seen. Thumbnails are fetched eagerly
-        // because grids need them; full-size media waits until it is opened.
+        // Drive content this device has not stored locally yet, governed by CachePolicy.
         for ((keyValue, remote) in remoteObjects) {
             if (localObjects.containsKey(keyValue)) continue
             if (keyValue.startsWith(StorageKey.SNAPSHOT_PREFIX)) continue
+            val key = runCatching { StorageKey(keyValue) }.getOrNull() ?: continue
+
+            val tombstone = tombstoneDao.get(keyValue)
+            if (tombstone != null) {
+                if (tombstone.reason == REMOTE_DELETION_REASON) {
+                    tombstoneDao.delete(keyValue)
+                    if (local.restore(key)) continue
+                } else {
+                    continue
+                }
+            }
+
             val kind = runCatching { StorageObjectKind.valueOf(remote.kind) }
                 .getOrDefault(StorageObjectKind.OTHER)
-            if (!kind.isThumbnail && scope != SyncScope.FULL) continue
-            val key = runCatching { StorageKey(keyValue) }.getOrNull() ?: continue
+            val shouldDownload = when (cachePolicy) {
+                CachePolicy.KEEP_EVERYTHING -> true
+                CachePolicy.HYBRID -> kind.isThumbnail || scope == SyncScope.FULL
+                CachePolicy.MINIMAL -> kind.isThumbnail || policy == ConflictPolicy.PREFER_REMOTE
+            }
+            if (!shouldDownload) continue
             val destination = File(localRootDir, keyValue)
             if (enqueue(key, destination, TransferDirection.DOWNLOAD, kind, remote.mimeType)) downloads++
         }
@@ -407,8 +485,33 @@ class SyncEngine(
         return propagated
     }
 
+    /**
+     * Moves local copies of remotely soft-deleted objects to `.trash` and cancels any
+     * active transfer queue rows for them so deleted items stay deleted across devices.
+     */
+    private suspend fun reconcileRemoteDeletions() {
+        val deleted = remoteObjectDao.getAllDeleted()
+        for (row in deleted) {
+            transferQueueDao.cancelActiveFor(row.storageKey)
+            val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: continue
+            if (key.startsWith(StorageKey.SNAPSHOT_PREFIX)) continue
+            if (local.peek(key) != null) {
+                local.delete(key)
+                tombstoneDao.upsert(
+                    SyncTombstoneEntity(
+                        storageKey = key.value,
+                        deletedAt = row.deletedAt ?: System.currentTimeMillis(),
+                        reason = REMOTE_DELETION_REASON,
+                        propagated = true
+                    )
+                )
+            }
+        }
+    }
+
     /** Records a local deletion so the next sync removes it from the drive too. */
     suspend fun recordDeletion(key: StorageKey, reason: String) {
+        transferQueueDao.cancelActiveFor(key.value)
         tombstoneDao.upsert(
             SyncTombstoneEntity(
                 storageKey = key.value,
@@ -419,6 +522,37 @@ class SyncEngine(
     }
 
     // ---- Records -------------------------------------------------------------
+
+    /**
+     * Pulls and safely merges a newer remote database snapshot during normal sync,
+     * advancing [TelegramDriveRepository.snapshotWatermark] so it is only imported once.
+     */
+    private suspend fun pullNewerSnapshotIfAvailable(): Boolean {
+        val watermark = driveRepository.snapshotWatermark()
+        val lastHash = driveRepository.current().lastSnapshotHash
+        val newest = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
+            .filter { row ->
+                val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: return@filter false
+                (StorageKey.snapshotRowCount(key) ?: 1) > 0
+            }
+            .maxByOrNull { it.modifiedAt } ?: return false
+
+        if (newest.modifiedAt <= watermark) return false
+        val key = runCatching { StorageKey(newest.storageKey) }.getOrNull() ?: return false
+        val file = telegram.materialize(key) ?: return false
+        val summary = databaseSnapshot.inspect(file) ?: return false
+        if (summary.rowCount == 0) return false
+
+        if (summary.contentHash.isNotEmpty() && summary.contentHash == lastHash) {
+            driveRepository.markSnapshotImported(newest.modifiedAt, summary.contentHash)
+            return false
+        }
+
+        val imported = databaseSnapshot.import(file)
+        driveRepository.markSnapshotImported(newest.modifiedAt, imported.contentHash)
+        DriveLog.i(TAG, "Merged ${imported.rowCount} rows from newer remote snapshot ${key.fileName}")
+        return true
+    }
 
     /**
      * Exports the database and uploads it — unless doing so would bury a better
@@ -445,14 +579,14 @@ class SyncEngine(
             return false
         }
 
-        // The channel was filling with identical 242 B snapshots, one per sync.
-        // If the newest snapshot already holds exactly these bytes, there is
-        // nothing to back up.
-        val hash = Hashing.sha256(staging)
         val newest = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
             .maxByOrNull { it.modifiedAt }
-        if (hash != null && newest?.contentHash == hash) {
+        val lastHash = driveRepository.current().lastSnapshotHash
+        if (newest != null && summary.contentHash.isNotEmpty() && lastHash == summary.contentHash) {
             staging.delete()
+            if (driveRepository.hasUnpushedRecords()) {
+                driveRepository.markSnapshotPushed(newest.modifiedAt, summary.contentHash)
+            }
             DriveLog.d(TAG, "Records unchanged since the last snapshot; nothing to upload")
             return false
         }
@@ -468,7 +602,12 @@ class SyncEngine(
             if (terminal is TransferProgress.Failed) {
                 throw StorageException(terminal.reason, retryable = terminal.retryable)
             }
-            terminal is TransferProgress.Completed
+            if (terminal is TransferProgress.Completed) {
+                driveRepository.markSnapshotPushed(summary.createdAt, summary.contentHash)
+                true
+            } else {
+                false
+            }
         } finally {
             staging.delete()
         }
@@ -488,7 +627,6 @@ class SyncEngine(
     suspend fun pullDatabaseSnapshot(): SnapshotSummary? = withContext(Dispatchers.IO) {
         val candidates = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
             .sortedByDescending { it.modifiedAt }
-            .mapNotNull { runCatching { StorageKey(it.storageKey) }.getOrNull() }
 
         if (candidates.isEmpty()) {
             DriveLog.w(TAG, "No snapshot in the drive to restore from")
@@ -499,7 +637,8 @@ class SyncEngine(
         // before row counts existed carry no count, so those are still downloaded
         // and inspected rather than assumed empty.
         var inspected = 0
-        for (key in candidates) {
+        for (row in candidates) {
+            val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: continue
             if (StorageKey.snapshotRowCount(key) == 0) continue
             if (inspected++ >= MAX_SNAPSHOT_CANDIDATES) break
 
@@ -514,7 +653,12 @@ class SyncEngine(
                 continue
             }
             DriveLog.i(TAG, "Restoring ${summary.rowCount} rows from ${key.fileName}")
-            return@withContext databaseSnapshot.import(file)
+            val imported = databaseSnapshot.import(file)
+            driveRepository.markSnapshotImported(
+                maxOf(imported.createdAt, row.modifiedAt),
+                imported.contentHash
+            )
+            return@withContext imported
         }
 
         DriveLog.w(
@@ -595,6 +739,7 @@ class SyncEngine(
         private const val PAGE_SIZE = 100
         private const val MAX_PAGES = 200
         private const val MAX_SNAPSHOT_CANDIDATES = 10
+        private const val REMOTE_DELETION_REASON = "remote deletion"
     }
 }
 

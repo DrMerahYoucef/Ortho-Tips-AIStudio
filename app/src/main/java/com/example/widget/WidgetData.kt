@@ -2,7 +2,9 @@ package com.example.widget
 
 import android.content.Context
 import com.example.data.local.OrthoDatabase
+import com.example.data.local.entity.Attendance
 import com.example.data.repository.ShiftRepository
+import kotlinx.coroutines.runBlocking
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -22,17 +24,16 @@ data class WidgetRow(
 }
 
 /**
- * Reads the two lists the widget shows. Called from the widget's own background
- * thread, so everything here is blocking on purpose.
+ * Reads the two lists the widget shows from the local Room database.
  */
 object WidgetData {
     // Both entry points are handed a context already wrapped in the app's chosen
     // language, so getString and the date formats resolve there.
 
-    fun shifts(context: Context, locale: Locale): List<WidgetRow> {
+    suspend fun loadShifts(context: Context, locale: Locale): List<WidgetRow> {
         val dao = OrthoDatabase.getInstance(context).shiftDao()
         val today = ShiftRepository.today()
-        val upcoming = kotlinx.coroutines.runBlocking { dao.getUpcoming(today, 15) }
+        val upcoming = dao.getUpcoming(today, 15)
         val dayFormat = SimpleDateFormat("EEEE d MMMM", locale)
         // Red for the shift running today, amber for the very next one, grey after that.
         val nextDate = upcoming.firstOrNull { it.date != today }?.date
@@ -52,7 +53,7 @@ object WidgetData {
     }
 
     /** Events of [dayOffset] days from today: 0 = today, 1 = tomorrow. */
-    fun events(context: Context, locale: Locale, dayOffset: Int): List<WidgetRow> {
+    suspend fun loadEvents(context: Context, locale: Locale, dayOffset: Int): List<WidgetRow> {
         val dao = OrthoDatabase.getInstance(context).timelineEventDao()
         val start = Calendar.getInstance().apply {
             add(Calendar.DAY_OF_YEAR, dayOffset)
@@ -60,16 +61,12 @@ object WidgetData {
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }
         val end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, 1) }
-        val events = kotlinx.coroutines.runBlocking {
-            dao.getEventsWithPatientBetween(start.timeInMillis, end.timeInMillis - 1)
-        }
+        val events = dao.getEventsWithPatientBetween(start.timeInMillis, end.timeInMillis - 1)
         val timeFormat = SimpleDateFormat("HH:mm", locale)
         return events.map { event ->
             val marks = when (event.attendance) {
-                com.example.data.local.entity.Attendance.ATTENDED.name ->
-                    context.getString(com.example.R.string.widget_attended)
-                com.example.data.local.entity.Attendance.MISSED.name ->
-                    context.getString(com.example.R.string.widget_missed)
+                Attendance.ATTENDED.name -> context.getString(com.example.R.string.widget_attended)
+                Attendance.MISSED.name -> context.getString(com.example.R.string.widget_missed)
                 else -> null
             }
             WidgetRow(
@@ -81,8 +78,8 @@ object WidgetData {
                         ?: event.description.takeIf { it.isNotBlank() }?.take(50)
                 ).joinToString(" · "),
                 accent = when (event.attendance) {
-                    com.example.data.local.entity.Attendance.ATTENDED.name -> WidgetRow.Accent.ATTENDED
-                    com.example.data.local.entity.Attendance.MISSED.name -> WidgetRow.Accent.MISSED
+                    Attendance.ATTENDED.name -> WidgetRow.Accent.ATTENDED
+                    Attendance.MISSED.name -> WidgetRow.Accent.MISSED
                     else -> WidgetRow.Accent.NEUTRAL
                 },
                 targetPatientId = event.patientId,
@@ -91,6 +88,13 @@ object WidgetData {
             )
         }
     }
+
+    /** Blocking entry points for legacy RemoteViewsFactory (API < 31). */
+    fun shifts(context: Context, locale: Locale): List<WidgetRow> =
+        runBlocking { loadShifts(context, locale) }
+
+    fun events(context: Context, locale: Locale, dayOffset: Int): List<WidgetRow> =
+        runBlocking { loadEvents(context, locale, dayOffset) }
 
     /** Header for the events page, e.g. "Today · Friday 18 September". */
     fun dayLabel(context: Context, locale: Locale, dayOffset: Int): String {

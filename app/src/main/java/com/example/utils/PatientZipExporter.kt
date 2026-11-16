@@ -79,6 +79,8 @@ object PatientZipExporter {
                                     put("eventDate", event.eventDate)
                                     put("title", event.title)
                                     put("description", event.description)
+                                    put("attendance", event.attendance)
+                                    put("remark", event.remark)
                                     put("createdAt", event.createdAt)
                                     put("updatedAt", event.updatedAt)
                                 }
@@ -102,6 +104,7 @@ object PatientZipExporter {
                                     put("materialsUsed", surgery.materialsUsed)
                                     put("complications", surgery.complications)
                                     put("postOpInstructions", surgery.postOpInstructions)
+                                    put("operativeProtocol", surgery.operativeProtocol)
                                     put("createdAt", surgery.createdAt)
                                     put("updatedAt", surgery.updatedAt)
                                 }

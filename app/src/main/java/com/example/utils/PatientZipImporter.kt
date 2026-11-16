@@ -1,6 +1,7 @@
 package com.example.utils
 
 import android.content.Context
+import com.example.data.local.entity.Attendance
 import com.example.data.local.entity.ImageCategory
 import com.example.data.local.entity.PatientDocumentEntity
 import com.example.data.local.entity.PatientEntity
@@ -134,6 +135,8 @@ object PatientZipImporter {
                                     eventDate = eventJson.getLong("eventDate"),
                                     title = eventJson.optString("title"),
                                     description = eventJson.optString("description"),
+                                    attendance = eventJson.optString("attendance").ifBlank { Attendance.UNKNOWN.name },
+                                    remark = eventJson.optString("remark"),
                                     createdAt = eventJson.optLong("createdAt", System.currentTimeMillis()),
                                     updatedAt = eventJson.optLong("updatedAt", System.currentTimeMillis())
                                 )
@@ -162,6 +165,7 @@ object PatientZipImporter {
                                     materialsUsed = surgeryJson.optString("materialsUsed"),
                                     complications = surgeryJson.optString("complications"),
                                     postOpInstructions = surgeryJson.optString("postOpInstructions"),
+                                    operativeProtocol = surgeryJson.optString("operativeProtocol"),
                                     createdAt = surgeryJson.optLong("createdAt", System.currentTimeMillis()),
                                     updatedAt = surgeryJson.optLong("updatedAt", System.currentTimeMillis())
                                 )

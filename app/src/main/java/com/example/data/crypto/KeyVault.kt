@@ -30,7 +30,9 @@ object CryptoKeys {
  */
 class KeystoreManager {
 
-    private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+    private val keyStore: KeyStore by lazy {
+        KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+    }
 
     private fun masterKey(): SecretKey {
         (keyStore.getKey(MASTER_KEY_ALIAS, null) as? SecretKey)?.let { return it }

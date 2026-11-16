@@ -78,6 +78,7 @@ class PatientMediaGateway(
         direct.parentFile?.mkdirs()
         val terminal = registry.telegram.get(key, direct).awaitTerminal()
         if (terminal is TransferProgress.Completed) {
+            if (terminal.obj.modifiedAt > 0) direct.setLastModified(terminal.obj.modifiedAt)
             DriveLog.d(TAG, "Fetched ${key.fileName} back from the drive")
             direct
         } else {
@@ -118,10 +119,16 @@ class PatientMediaGateway(
      * while the backup card cheerfully showed its files as uploaded.
      */
     suspend fun onRecordsChanged() {
-        if (!isDriveActive()) return
-        if (driveRepository.syncFrequency() == SyncFrequency.MANUAL) return
-        runCatching { scheduler.scheduleRecordSnapshot() }
-            .onFailure { DriveLog.w(TAG, "Could not schedule a record snapshot", it) }
+        val settings = driveRepository.current()
+        if (!settings.setupCompleted || settings.backend != StorageBackend.TELEGRAM) return
+        driveRepository.markRecordsDirty()
+        if (settings.syncFrequency == SyncFrequency.MANUAL) return
+        runCatching {
+            scheduler.scheduleRecordSnapshot(
+                wifiOnly = settings.syncOnWifiOnly,
+                chargingOnly = settings.syncWhileChargingOnly
+            )
+        }.onFailure { DriveLog.w(TAG, "Could not schedule a record snapshot", it) }
     }
 
     suspend fun onDocumentSaved(document: PatientDocumentEntity) {
