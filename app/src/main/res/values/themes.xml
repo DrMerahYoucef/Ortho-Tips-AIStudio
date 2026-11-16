@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Launch window: matches the app's own background, so opening the app shows
+         Android's launch screen on the right colour instead of a flash. -->
+    <style name="Theme.MyApplication" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+    </style>
+    <!-- The widget's note box floats over the home screen. -->
+    <style name="Theme.OrthoTransparent" parent="android:Theme.DeviceDefault.Dialog.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+</resources>

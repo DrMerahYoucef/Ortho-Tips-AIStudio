@@ -1,0 +1,1669 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 8,
+    "identityHash": "2b118ca7e9f42174fb0ea555a8418117",
+    "entities": [
+      {
+        "tableName": "chapters",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `titleFr` TEXT, `descriptionFr` TEXT, `icon` TEXT NOT NULL, `orderIndex` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleFr",
+            "columnName": "titleFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "descriptionFr",
+            "columnName": "descriptionFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "icon",
+            "columnName": "icon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderIndex",
+            "columnName": "orderIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "bones",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `chapterId` TEXT NOT NULL, `name` TEXT NOT NULL, `subtitle` TEXT NOT NULL, `region` TEXT NOT NULL, `traumaType` TEXT NOT NULL, `classificationSummary` TEXT NOT NULL, `nameFr` TEXT, `subtitleFr` TEXT, `regionFr` TEXT, `classificationSummaryFr` TEXT, `orderIndex` INTEGER NOT NULL, `isHighYield` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`chapterId`) REFERENCES `chapters`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chapterId",
+            "columnName": "chapterId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtitle",
+            "columnName": "subtitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "region",
+            "columnName": "region",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "traumaType",
+            "columnName": "traumaType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "classificationSummary",
+            "columnName": "classificationSummary",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nameFr",
+            "columnName": "nameFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "subtitleFr",
+            "columnName": "subtitleFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "regionFr",
+            "columnName": "regionFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "classificationSummaryFr",
+            "columnName": "classificationSummaryFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "orderIndex",
+            "columnName": "orderIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isHighYield",
+            "columnName": "isHighYield",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_bones_chapterId",
+            "unique": false,
+            "columnNames": [
+              "chapterId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_bones_chapterId` ON `${TABLE_NAME}` (`chapterId`)"
+          },
+          {
+            "name": "index_bones_name",
+            "unique": false,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_bones_name` ON `${TABLE_NAME}` (`name`)"
+          },
+          {
+            "name": "index_bones_region",
+            "unique": false,
+            "columnNames": [
+              "region"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_bones_region` ON `${TABLE_NAME}` (`region`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "chapters",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "chapterId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "sections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `boneId` TEXT NOT NULL, `sectionType` TEXT NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `pearls` TEXT NOT NULL, `warnings` TEXT NOT NULL, `titleFr` TEXT, `contentFr` TEXT, `pearlsFr` TEXT, `warningsFr` TEXT, `orderIndex` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`boneId`) REFERENCES `bones`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "boneId",
+            "columnName": "boneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sectionType",
+            "columnName": "sectionType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pearls",
+            "columnName": "pearls",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warnings",
+            "columnName": "warnings",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleFr",
+            "columnName": "titleFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentFr",
+            "columnName": "contentFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pearlsFr",
+            "columnName": "pearlsFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "warningsFr",
+            "columnName": "warningsFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "orderIndex",
+            "columnName": "orderIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sections_boneId",
+            "unique": false,
+            "columnNames": [
+              "boneId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sections_boneId` ON `${TABLE_NAME}` (`boneId`)"
+          },
+          {
+            "name": "index_sections_sectionType",
+            "unique": false,
+            "columnNames": [
+              "sectionType"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sections_sectionType` ON `${TABLE_NAME}` (`sectionType`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "bones",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "boneId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "images",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `boneId` TEXT NOT NULL, `sectionId` TEXT, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `titleFr` TEXT, `descriptionFr` TEXT, `drawableResName` TEXT NOT NULL, `imagePath` TEXT, `figureNumber` TEXT NOT NULL, `tags` TEXT NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`boneId`) REFERENCES `bones`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "boneId",
+            "columnName": "boneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sectionId",
+            "columnName": "sectionId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleFr",
+            "columnName": "titleFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "descriptionFr",
+            "columnName": "descriptionFr",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "drawableResName",
+            "columnName": "drawableResName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imagePath",
+            "columnName": "imagePath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "figureNumber",
+            "columnName": "figureNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_images_boneId",
+            "unique": false,
+            "columnNames": [
+              "boneId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_images_boneId` ON `${TABLE_NAME}` (`boneId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "bones",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "boneId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "bookmarks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`boneId` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `folder` TEXT NOT NULL, `tags` TEXT NOT NULL, PRIMARY KEY(`boneId`))",
+        "fields": [
+          {
+            "fieldPath": "boneId",
+            "columnName": "boneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "folder",
+            "columnName": "folder",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "boneId"
+          ]
+        }
+      },
+      {
+        "tableName": "notes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `boneId` TEXT, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `colorTag` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "boneId",
+            "columnName": "boneId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "colorTag",
+            "columnName": "colorTag",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_notes_boneId",
+            "unique": false,
+            "columnNames": [
+              "boneId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notes_boneId` ON `${TABLE_NAME}` (`boneId`)"
+          },
+          {
+            "name": "index_notes_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notes_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "patients",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `patientCode` TEXT NOT NULL, `fullName` TEXT NOT NULL, `dateOfBirth` INTEGER, `gender` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `address` TEXT NOT NULL, `emergencyContactName` TEXT NOT NULL, `emergencyContactPhone` TEXT NOT NULL, `insuranceProvider` TEXT NOT NULL, `insuranceNumber` TEXT NOT NULL, `medicalHistory` TEXT NOT NULL, `allergies` TEXT NOT NULL, `chronicDiseases` TEXT NOT NULL, `previousSurgeries` TEXT NOT NULL, `medications` TEXT NOT NULL, `generalNotes` TEXT NOT NULL, `diagnosis` TEXT NOT NULL, `bodyRegion` TEXT NOT NULL, `side` TEXT NOT NULL, `injuryDate` INTEGER, `traumaMechanism` TEXT NOT NULL, `fractureClassification` TEXT NOT NULL, `imagingFindings` TEXT NOT NULL, `treatmentPlan` TEXT NOT NULL, `isArchived` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patientCode",
+            "columnName": "patientCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullName",
+            "columnName": "fullName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dateOfBirth",
+            "columnName": "dateOfBirth",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "gender",
+            "columnName": "gender",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phone",
+            "columnName": "phone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "address",
+            "columnName": "address",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "emergencyContactName",
+            "columnName": "emergencyContactName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "emergencyContactPhone",
+            "columnName": "emergencyContactPhone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "insuranceProvider",
+            "columnName": "insuranceProvider",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "insuranceNumber",
+            "columnName": "insuranceNumber",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "medicalHistory",
+            "columnName": "medicalHistory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "allergies",
+            "columnName": "allergies",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chronicDiseases",
+            "columnName": "chronicDiseases",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "previousSurgeries",
+            "columnName": "previousSurgeries",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "medications",
+            "columnName": "medications",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generalNotes",
+            "columnName": "generalNotes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diagnosis",
+            "columnName": "diagnosis",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bodyRegion",
+            "columnName": "bodyRegion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "side",
+            "columnName": "side",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "injuryDate",
+            "columnName": "injuryDate",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "traumaMechanism",
+            "columnName": "traumaMechanism",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fractureClassification",
+            "columnName": "fractureClassification",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imagingFindings",
+            "columnName": "imagingFindings",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treatmentPlan",
+            "columnName": "treatmentPlan",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "isArchived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_patients_patientCode",
+            "unique": true,
+            "columnNames": [
+              "patientCode"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_patients_patientCode` ON `${TABLE_NAME}` (`patientCode`)"
+          },
+          {
+            "name": "index_patients_fullName",
+            "unique": false,
+            "columnNames": [
+              "fullName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patients_fullName` ON `${TABLE_NAME}` (`fullName`)"
+          },
+          {
+            "name": "index_patients_diagnosis",
+            "unique": false,
+            "columnNames": [
+              "diagnosis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patients_diagnosis` ON `${TABLE_NAME}` (`diagnosis`)"
+          },
+          {
+            "name": "index_patients_bodyRegion",
+            "unique": false,
+            "columnNames": [
+              "bodyRegion"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patients_bodyRegion` ON `${TABLE_NAME}` (`bodyRegion`)"
+          },
+          {
+            "name": "index_patients_isArchived",
+            "unique": false,
+            "columnNames": [
+              "isArchived"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patients_isArchived` ON `${TABLE_NAME}` (`isArchived`)"
+          }
+        ]
+      },
+      {
+        "tableName": "timeline_events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `patientId` TEXT NOT NULL, `eventDate` INTEGER NOT NULL, `title` TEXT NOT NULL, `description` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`patientId`) REFERENCES `patients`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patientId",
+            "columnName": "patientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventDate",
+            "columnName": "eventDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_timeline_events_patientId",
+            "unique": false,
+            "columnNames": [
+              "patientId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_timeline_events_patientId` ON `${TABLE_NAME}` (`patientId`)"
+          },
+          {
+            "name": "index_timeline_events_eventDate",
+            "unique": false,
+            "columnNames": [
+              "eventDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_timeline_events_eventDate` ON `${TABLE_NAME}` (`eventDate`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patients",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patientId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "surgeries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `patientId` TEXT NOT NULL, `surgeryDate` INTEGER NOT NULL, `hospitalClinic` TEXT NOT NULL, `surgeon` TEXT NOT NULL, `assistants` TEXT NOT NULL, `anesthesiaType` TEXT NOT NULL, `diagnosis` TEXT NOT NULL, `procedure` TEXT NOT NULL, `materialsUsed` TEXT NOT NULL, `complications` TEXT NOT NULL, `postOpInstructions` TEXT NOT NULL, `operativeProtocol` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`patientId`) REFERENCES `patients`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patientId",
+            "columnName": "patientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "surgeryDate",
+            "columnName": "surgeryDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hospitalClinic",
+            "columnName": "hospitalClinic",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "surgeon",
+            "columnName": "surgeon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assistants",
+            "columnName": "assistants",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "anesthesiaType",
+            "columnName": "anesthesiaType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diagnosis",
+            "columnName": "diagnosis",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "procedure",
+            "columnName": "procedure",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "materialsUsed",
+            "columnName": "materialsUsed",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "complications",
+            "columnName": "complications",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postOpInstructions",
+            "columnName": "postOpInstructions",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operativeProtocol",
+            "columnName": "operativeProtocol",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_surgeries_patientId",
+            "unique": false,
+            "columnNames": [
+              "patientId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_surgeries_patientId` ON `${TABLE_NAME}` (`patientId`)"
+          },
+          {
+            "name": "index_surgeries_surgeryDate",
+            "unique": false,
+            "columnNames": [
+              "surgeryDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_surgeries_surgeryDate` ON `${TABLE_NAME}` (`surgeryDate`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patients",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patientId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "patient_images",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `patientId` TEXT NOT NULL, `timelineEventId` TEXT, `surgeryId` TEXT, `category` TEXT NOT NULL, `filePath` TEXT NOT NULL, `thumbnailPath` TEXT, `ocrText` TEXT NOT NULL, `annotationsJson` TEXT NOT NULL, `notes` TEXT NOT NULL, `mediaType` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, `capturedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`patientId`) REFERENCES `patients`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`timelineEventId`) REFERENCES `timeline_events`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`surgeryId`) REFERENCES `surgeries`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patientId",
+            "columnName": "patientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timelineEventId",
+            "columnName": "timelineEventId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "surgeryId",
+            "columnName": "surgeryId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "filePath",
+            "columnName": "filePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "thumbnailPath",
+            "columnName": "thumbnailPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ocrText",
+            "columnName": "ocrText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "annotationsJson",
+            "columnName": "annotationsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaType",
+            "columnName": "mediaType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capturedAt",
+            "columnName": "capturedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_patient_images_patientId",
+            "unique": false,
+            "columnNames": [
+              "patientId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_images_patientId` ON `${TABLE_NAME}` (`patientId`)"
+          },
+          {
+            "name": "index_patient_images_timelineEventId",
+            "unique": false,
+            "columnNames": [
+              "timelineEventId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_images_timelineEventId` ON `${TABLE_NAME}` (`timelineEventId`)"
+          },
+          {
+            "name": "index_patient_images_surgeryId",
+            "unique": false,
+            "columnNames": [
+              "surgeryId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_images_surgeryId` ON `${TABLE_NAME}` (`surgeryId`)"
+          },
+          {
+            "name": "index_patient_images_category",
+            "unique": false,
+            "columnNames": [
+              "category"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_images_category` ON `${TABLE_NAME}` (`category`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patients",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patientId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "timeline_events",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "timelineEventId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "surgeries",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "surgeryId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "patient_documents",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `patientId` TEXT NOT NULL, `timelineEventId` TEXT, `surgeryId` TEXT, `title` TEXT NOT NULL, `filePath` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `ocrText` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`patientId`) REFERENCES `patients`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`timelineEventId`) REFERENCES `timeline_events`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL , FOREIGN KEY(`surgeryId`) REFERENCES `surgeries`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patientId",
+            "columnName": "patientId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timelineEventId",
+            "columnName": "timelineEventId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "surgeryId",
+            "columnName": "surgeryId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "filePath",
+            "columnName": "filePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ocrText",
+            "columnName": "ocrText",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_patient_documents_patientId",
+            "unique": false,
+            "columnNames": [
+              "patientId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_documents_patientId` ON `${TABLE_NAME}` (`patientId`)"
+          },
+          {
+            "name": "index_patient_documents_timelineEventId",
+            "unique": false,
+            "columnNames": [
+              "timelineEventId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_documents_timelineEventId` ON `${TABLE_NAME}` (`timelineEventId`)"
+          },
+          {
+            "name": "index_patient_documents_surgeryId",
+            "unique": false,
+            "columnNames": [
+              "surgeryId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_documents_surgeryId` ON `${TABLE_NAME}` (`surgeryId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patients",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patientId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "timeline_events",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "timelineEventId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "surgeries",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "surgeryId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "field_suggestions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`fieldKey` TEXT NOT NULL, `value` TEXT NOT NULL, `useCount` INTEGER NOT NULL, `lastUsedAt` INTEGER NOT NULL, PRIMARY KEY(`fieldKey`, `value`))",
+        "fields": [
+          {
+            "fieldPath": "fieldKey",
+            "columnName": "fieldKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "useCount",
+            "columnName": "useCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUsedAt",
+            "columnName": "lastUsedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "fieldKey",
+            "value"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_field_suggestions_fieldKey",
+            "unique": false,
+            "columnNames": [
+              "fieldKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_field_suggestions_fieldKey` ON `${TABLE_NAME}` (`fieldKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "field_pairs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sourceField` TEXT NOT NULL, `sourceValue` TEXT NOT NULL, `targetField` TEXT NOT NULL, `targetValue` TEXT NOT NULL, `count` INTEGER NOT NULL, `lastUsedAt` INTEGER NOT NULL, PRIMARY KEY(`sourceField`, `sourceValue`, `targetField`, `targetValue`))",
+        "fields": [
+          {
+            "fieldPath": "sourceField",
+            "columnName": "sourceField",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceValue",
+            "columnName": "sourceValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetField",
+            "columnName": "targetField",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetValue",
+            "columnName": "targetValue",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "count",
+            "columnName": "count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUsedAt",
+            "columnName": "lastUsedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sourceField",
+            "sourceValue",
+            "targetField",
+            "targetValue"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_field_pairs_sourceField_sourceValue_targetField",
+            "unique": false,
+            "columnNames": [
+              "sourceField",
+              "sourceValue",
+              "targetField"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_field_pairs_sourceField_sourceValue_targetField` ON `${TABLE_NAME}` (`sourceField`, `sourceValue`, `targetField`)"
+          }
+        ]
+      },
+      {
+        "tableName": "remote_objects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`storageKey` TEXT NOT NULL, `kind` TEXT NOT NULL, `chatId` INTEGER NOT NULL, `messageId` INTEGER NOT NULL, `remoteFileId` TEXT NOT NULL, `uniqueFileId` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `contentHash` TEXT, `mimeType` TEXT NOT NULL, `encrypted` INTEGER NOT NULL, `modifiedAt` INTEGER NOT NULL, `syncedAt` INTEGER NOT NULL, `deletedAt` INTEGER, `revision` INTEGER NOT NULL, PRIMARY KEY(`storageKey`))",
+        "fields": [
+          {
+            "fieldPath": "storageKey",
+            "columnName": "storageKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chatId",
+            "columnName": "chatId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageId",
+            "columnName": "messageId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteFileId",
+            "columnName": "remoteFileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uniqueFileId",
+            "columnName": "uniqueFileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "contentHash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encrypted",
+            "columnName": "encrypted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modifiedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncedAt",
+            "columnName": "syncedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "storageKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_remote_objects_uniqueFileId",
+            "unique": false,
+            "columnNames": [
+              "uniqueFileId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_remote_objects_uniqueFileId` ON `${TABLE_NAME}` (`uniqueFileId`)"
+          },
+          {
+            "name": "index_remote_objects_kind",
+            "unique": false,
+            "columnNames": [
+              "kind"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_remote_objects_kind` ON `${TABLE_NAME}` (`kind`)"
+          },
+          {
+            "name": "index_remote_objects_deletedAt",
+            "unique": false,
+            "columnNames": [
+              "deletedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_remote_objects_deletedAt` ON `${TABLE_NAME}` (`deletedAt`)"
+          },
+          {
+            "name": "index_remote_objects_contentHash",
+            "unique": false,
+            "columnNames": [
+              "contentHash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_remote_objects_contentHash` ON `${TABLE_NAME}` (`contentHash`)"
+          }
+        ]
+      },
+      {
+        "tableName": "transfer_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `storageKey` TEXT NOT NULL, `direction` TEXT NOT NULL, `localPath` TEXT NOT NULL, `kind` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `state` TEXT NOT NULL, `attemptCount` INTEGER NOT NULL, `nextAttemptAt` INTEGER NOT NULL, `bytesTransferred` INTEGER NOT NULL, `totalBytes` INTEGER NOT NULL, `lastError` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "storageKey",
+            "columnName": "storageKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localPath",
+            "columnName": "localPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "nextAttemptAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytesTransferred",
+            "columnName": "bytesTransferred",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalBytes",
+            "columnName": "totalBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_transfer_queue_state",
+            "unique": false,
+            "columnNames": [
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transfer_queue_state` ON `${TABLE_NAME}` (`state`)"
+          },
+          {
+            "name": "index_transfer_queue_storageKey",
+            "unique": false,
+            "columnNames": [
+              "storageKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transfer_queue_storageKey` ON `${TABLE_NAME}` (`storageKey`)"
+          },
+          {
+            "name": "index_transfer_queue_nextAttemptAt",
+            "unique": false,
+            "columnNames": [
+              "nextAttemptAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transfer_queue_nextAttemptAt` ON `${TABLE_NAME}` (`nextAttemptAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sync_tombstones",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`storageKey` TEXT NOT NULL, `deletedAt` INTEGER NOT NULL, `reason` TEXT NOT NULL, `propagated` INTEGER NOT NULL, PRIMARY KEY(`storageKey`))",
+        "fields": [
+          {
+            "fieldPath": "storageKey",
+            "columnName": "storageKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deletedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "propagated",
+            "columnName": "propagated",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "storageKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sync_tombstones_propagated",
+            "unique": false,
+            "columnNames": [
+              "propagated"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_tombstones_propagated` ON `${TABLE_NAME}` (`propagated`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2b118ca7e9f42174fb0ea555a8418117')"
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Permission `patients` (OrthoTips.patients). -->
+<resources>
+    <string name="ext_perm_patients">Dossiers patients — lire, créer et modifier vos patients et ajouter des médias (jamais supprimer). Données sensibles.</string>
+</resources>

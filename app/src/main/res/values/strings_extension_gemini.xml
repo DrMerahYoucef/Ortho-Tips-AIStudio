@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Permission `gemini` (OrthoTips.gemini). -->
+<resources>
+    <string name="ext_perm_gemini">Gemini with the app’s key — uses the key set in Settings → Gemini (it never sees the key)</string>
+</resources>

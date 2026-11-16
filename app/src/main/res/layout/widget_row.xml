@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_container"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_row_background"
+    android:padding="8dp">
+
+    <View
+        android:id="@+id/row_accent"
+        android:layout_width="4dp"
+        android:layout_height="match_parent"
+        android:minHeight="34dp"
+        android:layout_marginEnd="8dp" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/row_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/row_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#B0BEC5"
+            android:textSize="11sp"
+            android:maxLines="2"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/row_actions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/row_attended"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:gravity="center"
+            android:text="@string/widget_mark_attended_symbol"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:background="@drawable/widget_action_green" />
+
+        <TextView
+            android:id="@+id/row_missed"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:text="@string/widget_mark_missed_symbol"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:background="@drawable/widget_action_red" />
+
+        <TextView
+            android:id="@+id/row_note"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="6dp"
+            android:gravity="center"
+            android:text="@string/widget_note_symbol"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:background="@drawable/widget_action_blue" />
+    </LinearLayout>
+</LinearLayout>

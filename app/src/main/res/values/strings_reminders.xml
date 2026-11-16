@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reminders scheduled by extensions (OrthoTips.notifications). -->
+<resources>
+    <string name="reminders_channel">Extension reminders</string>
+    <string name="reminders_channel_description">Reminders scheduled by your extensions, shown even when the app is closed.</string>
+</resources>

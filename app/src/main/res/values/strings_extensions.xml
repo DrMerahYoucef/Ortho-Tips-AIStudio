@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Extensions: .OTips packages installed and managed in the app (see docs/extensions/guide.md). -->
+<resources>
+    <!-- Bottom navigation and the Extensions area -->
+    <string name="nav_extensions">Extensions</string>
+    <string name="ext_hub_subtitle">Guides, classifications and tools</string>
+    <string name="ext_hub_tab_manage">Manage</string>
+
+    <!-- Manager -->
+    <string name="ext_your_extensions">Your extensions</string>
+    <string name="ext_import">Import</string>
+    <string name="ext_import_file">Import an extension</string>
+    <string name="ext_empty_title">No extensions yet</string>
+    <string name="ext_empty_body">Extensions are .OTips packages: operative guides, classifications and small tools. Install the ones shipped with the app, or import your own.</string>
+    <string name="ext_privacy_note">Extensions run in a sandbox and cannot see your patients. They reach the internet or the reference library only when they ask for it. What they save stays on this phone and is erased when you delete them.</string>
+    <string name="ext_meta">v%1$s · %2$s</string>
+    <string name="ext_uses_internet">Uses the internet</string>
+    <string name="ext_more">More options</string>
+
+    <string name="ext_action_open">Open</string>
+    <string name="ext_action_details">Details</string>
+    <string name="ext_action_export">Export as .OTips</string>
+    <string name="ext_action_clear_data">Clear its data</string>
+    <string name="ext_action_delete">Delete</string>
+
+    <string name="ext_delete_title">Delete %1$s?</string>
+    <string name="ext_delete_body">The extension and everything it saved on this phone will be removed. If it has its own backup button, save a backup first.</string>
+    <string name="ext_delete_body_operative_guide">The Operative Guide and the guide data imported into it will be removed from this phone. Your bookmarks and case notes are kept and come back if you import the same data again.</string>
+    <string name="ext_delete">Delete</string>
+    <string name="ext_clear_title">Clear the data of %1$s?</string>
+    <string name="ext_clear_body">Everything the extension saved (progress, settings, files) is erased. The extension itself stays installed.</string>
+    <string name="ext_clear">Clear</string>
+    <string name="ext_cancel">Cancel</string>
+
+    <string name="ext_msg_installed">%1$s installed</string>
+    <string name="ext_msg_updated">%1$s updated to version %2$s</string>
+    <string name="ext_msg_deleted">%1$s deleted</string>
+    <string name="ext_msg_data_cleared">Data of %1$s cleared</string>
+    <string name="ext_msg_exported">Extension file saved</string>
+    <string name="ext_msg_export_failed">Could not save the file</string>
+    <string name="ext_msg_converted">%1$s packaged as .OTips</string>
+    <string name="ext_cannot_open">This extension needs a newer version of Ortho Tips.</string>
+
+    <!-- Details -->
+    <string name="ext_details_kind">Type</string>
+    <string name="ext_details_version">Version</string>
+    <string name="ext_details_author">Author</string>
+    <string name="ext_details_source">Origin</string>
+    <string name="ext_details_size">Size</string>
+    <string name="ext_details_updated">Last installed</string>
+    <string name="ext_details_permissions">Granted access</string>
+
+    <!-- Import screen -->
+    <string name="ext_import_title">Import an extension</string>
+    <string name="ext_import_pick_title">From a file</string>
+    <string name="ext_import_pick_body">Choose an .OTips extension file on this phone. It is checked before anything is installed.</string>
+    <string name="ext_import_pick_button">Choose an .OTips file</string>
+    <string name="ext_convert_action">Convert an HTML program to .OTips</string>
+    <string name="ext_section_updates">Updates available</string>
+    <string name="ext_section_bundled">Bundled extensions</string>
+    <string name="ext_section_bundled_empty">No extension is bundled with this version.</string>
+    <string name="ext_section_installed">Installed extensions</string>
+    <string name="ext_section_installed_empty">Nothing installed yet.</string>
+    <string name="ext_section_external">External extensions</string>
+
+    <string name="ext_status_new">Not installed</string>
+    <string name="ext_status_installed">Already installed</string>
+    <string name="ext_status_changed">Different build of v%1$s</string>
+    <string name="ext_status_update">Update: v%1$s → v%2$s</string>
+    <string name="ext_status_older">Older than the installed v%1$s</string>
+    <string name="ext_action_install">Install</string>
+    <string name="ext_action_update">Update</string>
+    <string name="ext_action_reinstall">Reinstall</string>
+    <string name="ext_action_downgrade">Install this older version</string>
+
+    <string name="ext_source_bundled">Bundled</string>
+    <string name="ext_source_external">Imported</string>
+    <string name="ext_source_legacy">Imported (HTML)</string>
+
+    <string name="ext_kind_html">Tool</string>
+    <string name="ext_kind_operative_guide">Operative guide</string>
+    <string name="ext_kind_classifications">Classifications</string>
+    <string name="ext_kind_other">Extension</string>
+
+    <string name="ext_review_version">Version %1$s</string>
+    <string name="ext_review_by">By %1$s</string>
+    <string name="ext_review_requests">This extension requests:</string>
+    <string name="ext_review_no_permissions">No special access.</string>
+
+    <string name="ext_perm_internet">Internet access</string>
+    <string name="ext_perm_database">Reading the clinical reference library</string>
+    <string name="ext_perm_storage">Storing files on this phone</string>
+    <string name="ext_perm_assets">Reading its own bundled files</string>
+    <string name="ext_perm_import_export">Importing and exporting files</string>
+    <string name="ext_perm_sms">Reading bank SMS: debits, credits and balances (never codes)</string>
+    <string name="ext_perm_notifications">Notifications — reminders shown even when the app is closed</string>
+    <string name="ext_perm_background">Background audio — keeps playing with the screen off, controls in the notification panel</string>
+
+    <string name="ext_error_unreadable">This file could not be read.</string>
+    <string name="ext_error_not_a_package">This file is not an .OTips extension.</string>
+    <string name="ext_error_corrupted">This extension is damaged or was modified. It was not installed.</string>
+    <string name="ext_error_unsupported_format">This extension was made for a newer version of Ortho Tips.</string>
+    <string name="ext_error_outdated_package">This extension file was made by an earlier test version of Ortho Tips. Export it again from the app that created it.</string>
+    <string name="ext_error_unsupported_kind">This type of extension needs a newer version of Ortho Tips.</string>
+    <string name="ext_error_requires_newer_app">This extension needs a newer version of Ortho Tips.</string>
+    <string name="ext_error_invalid_manifest">This extension\'s description is invalid.</string>
+    <string name="ext_error_invalid_content">This extension\'s content is incomplete.</string>
+    <string name="ext_error_not_html">This file is not an HTML program.</string>
+    <string name="ext_error_too_large">This file is too large.</string>
+    <string name="ext_error_install_failed">The extension could not be installed.</string>
+    <string name="ext_error_storage_failed">The extension could not be saved on this phone.</string>
+
+    <!-- Runner -->
+    <string name="ext_back">Back</string>
+    <string name="ext_reload">Reload</string>
+    <string name="ext_console">Console</string>
+    <string name="ext_console_errors">Console (%1$d errors)</string>
+    <string name="ext_console_empty">No messages.</string>
+    <string name="ext_clear_console">Clear</string>
+    <string name="ext_close">Close</string>
+    <string name="ext_not_found">This extension is no longer installed.</string>
+    <string name="ext_file_saved">File saved</string>
+    <string name="ext_file_save_failed">Could not save the file</string>
+    <!-- Bank SMS notifications -->
+    <string name="sms_notif_channel">Bank movements by SMS</string>
+    <string name="sms_notif_debit">CCP expense: −%1$s DA</string>
+    <string name="sms_notif_credit">CCP income: +%1$s DA</string>
+    <string name="sms_notif_balance">New balance: %1$s DA</string>
+    <string name="sms_notif_open">Tap to open</string>
+</resources>

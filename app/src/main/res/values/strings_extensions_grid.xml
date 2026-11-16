@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Extensions screen: a grid of installed extensions. -->
+<resources>
+    <string name="ext_grid_add">Add</string>
+    <string name="ext_grid_options">Options</string>
+    <string name="ext_grid_hint">Tap an extension to open it. Long press for its options: details, export, clear its data, delete.</string>
+    <string name="ext_grid_back">Back to extensions</string>
+</resources>

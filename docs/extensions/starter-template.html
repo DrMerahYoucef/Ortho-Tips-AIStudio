@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ortho-ext-id" content="exemple-checklist">
+<meta name="ortho-ext-name" content="Checklist exemple">
+<meta name="ortho-ext-description" content="Modèle de départ : liste à cocher, sauvegarde, thème clair/sombre.">
+<meta name="ortho-ext-version" content="1.0">
+<meta name="ortho-ext-icon" content="✅">
+<title>Checklist exemple</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --ink:#1b1d22; --ink-2:#5f6b76;
+  --line:rgba(0,0,0,.08); --accent:#3f51b5; --on-accent:#ffffff; --danger:#c62828;
+  --radius:16px;
+}
+html[data-theme="dark"]{
+  --bg:#121417; --surface:#1d2025; --ink:#e6e9ee; --ink-2:#a3adb8;
+  --line:rgba(255,255,255,.08); --accent:#9fa8ff; --on-accent:#121417; --danger:#ef9a9a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.5 system-ui,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 12px}
+.card{background:var(--surface);border-radius:var(--radius);padding:4px 0;border:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;min-height:48px}
+.row + .row{border-top:1px solid var(--line)}
+.row input{width:22px;height:22px;accent-color:var(--accent)}
+.row.done span{color:var(--ink-2);text-decoration:line-through}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+button{font:inherit;border:0;border-radius:999px;padding:10px 16px;min-height:44px;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+button.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.muted{color:var(--ink-2);font-size:13px}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<main>
+  <section id="view-list">
+    <h1>Checklist exemple</h1>
+    <div class="card" id="list"></div>
+    <div class="bar">
+      <button class="primary" id="btn-stats">Voir le résumé</button>
+      <button id="btn-export">Sauvegarder</button>
+      <button id="btn-import">Restaurer</button>
+      <input type="file" id="file" accept="application/json,.json" hidden>
+    </div>
+    <p class="muted" id="where"></p>
+  </section>
+
+  <section id="view-stats" hidden>
+    <h1>Résumé</h1>
+    <div class="card"><div class="row"><span id="stats"></span></div></div>
+    <div class="bar"><button id="btn-back">Retour</button></div>
+  </section>
+</main>
+
+<script>
+/* ---- Host detection: present inside Ortho Tips, absent in a browser ---- */
+const HOST = window.OrthoTips || null;
+const STORE_KEY = 'exemple-checklist:state';
+const SCHEMA = 1;
+
+const ITEMS = [
+  {id: 'a', label: 'Relire la classification de Garden'},
+  {id: 'b', label: 'Réviser les voies d’abord de la hanche'},
+  {id: 'c', label: 'Faire la fiche fracture du scaphoïde'}
+];
+
+let state = {v: SCHEMA, done: {}};
+
+/* ---- Storage: OrthoTips.storage in the app, localStorage in a browser ---- */
+const Store = {
+  get(key){
+    try{ return HOST ? HOST.storage.get(key) : localStorage.getItem(key); }catch(e){ return null; }
+  },
+  set(key, value){
+    try{ HOST ? HOST.storage.set(key, value) : localStorage.setItem(key, value); }catch(e){}
+  }
+};
+
+function load(){
+  try{
+    const raw = JSON.parse(Store.get(STORE_KEY) || 'null');
+    if(raw && typeof raw === 'object') state = migrate(raw);
+  }catch(e){ /* first run or unreadable: keep defaults */ }
+}
+function migrate(raw){
+  // Bump SCHEMA and convert older shapes here; never drop the user's data.
+  return {v: SCHEMA, done: (raw.done && typeof raw.done === 'object') ? raw.done : {}};
+}
+let saveTimer = 0;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => Store.set(STORE_KEY, JSON.stringify(state)), 200);
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden'){ clearTimeout(saveTimer); Store.set(STORE_KEY, JSON.stringify(state)); }
+});
+
+/* ---- Theme: follow the app, else the system ---- */
+function applyTheme(t){ document.documentElement.dataset.theme = t; }
+if(HOST){
+  applyTheme(HOST.theme);
+  HOST.onThemeChange(applyTheme);
+}else{
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  applyTheme(mq.matches ? 'dark' : 'light');
+  mq.addEventListener('change', e => applyTheme(e.matches ? 'dark' : 'light'));
+}
+
+/* ---- Small helpers ---- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function toast(msg){ if(HOST) HOST.toast(msg); else console.log(msg); }
+
+/* ---- Views ---- */
+function render(){
+  $('#list').innerHTML = ITEMS.map(it => `
+    <label class="row ${state.done[it.id] ? 'done' : ''}">
+      <input type="checkbox" data-id="${it.id}" ${state.done[it.id] ? 'checked' : ''}>
+      <span>${esc(it.label)}</span>
+    </label>`).join('');
+}
+function showView(name){
+  $('#view-list').hidden = name !== 'list';
+  $('#view-stats').hidden = name !== 'stats';
+  if(name === 'stats'){
+    const n = ITEMS.filter(it => state.done[it.id]).length;
+    $('#stats').textContent = n + ' / ' + ITEMS.length + ' faits';
+  }
+  window.scrollTo(0, 0);
+}
+// Back in the app: leave the secondary view first, then let the app close us.
+if(HOST) HOST.onBack(() => {
+  if(!$('#view-stats').hidden){ showView('list'); return true; }
+  return false;
+});
+
+$('#list').addEventListener('change', e => {
+  const id = e.target.dataset.id;
+  if(!id) return;
+  state.done[id] = e.target.checked;
+  save(); render();
+});
+$('#btn-stats').addEventListener('click', () => showView('stats'));
+$('#btn-back').addEventListener('click', () => showView('list'));
+
+/* ---- Backup: export and restore a JSON file ---- */
+$('#btn-export').addEventListener('click', async () => {
+  const name = 'exemple-checklist-' + new Date().toISOString().slice(0, 10) + '.json';
+  const json = JSON.stringify({app: 'exemple-checklist', v: SCHEMA, date: new Date().toISOString(), data: state}, null, 2);
+  if(HOST){
+    if(await HOST.saveFile(name, json, 'application/json')) toast('Sauvegarde enregistrée');
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([json], {type: 'application/json'}));
+  const a = Object.assign(document.createElement('a'), {href: url, download: name});
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+});
+$('#btn-import').addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  try{
+    const raw = JSON.parse(await file.text());
+    if(!raw || raw.app !== 'exemple-checklist' || !raw.data) throw new Error('format');
+    state = migrate(raw.data);
+    save(); render();
+    toast('Sauvegarde restaurée');
+  }catch(err){
+    alert('Ce fichier n’est pas une sauvegarde de cette extension.');
+  }
+});
+
+/* ---- Start ---- */
+$('#where').textContent = HOST
+  ? 'Enregistré dans Ortho Tips, sur ce téléphone.'
+  : 'Enregistré dans ce navigateur.';
+load();
+render();
+</script>
+</body>
+</html>

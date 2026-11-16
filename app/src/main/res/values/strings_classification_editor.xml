@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Classification editor (Word-style). -->
+<resources>
+    <string name="ced_title">Classification editor</string>
+    <string name="ced_open_editor">Classification editor</string>
+    <string name="ced_new_pack">New pack</string>
+    <string name="ced_your_drafts">Your packs</string>
+    <string name="ced_no_drafts">No pack yet. Create one, or edit an installed pack below.</string>
+    <string name="ced_installed_packs">Installed packs</string>
+    <string name="ced_no_installed_packs">No classification pack is installed.</string>
+    <string name="ced_edit">Edit</string>
+    <string name="ced_draft_meta">v%1$s · %2$d chapters</string>
+    <string name="ced_pack_name">Pack name</string>
+    <string name="ced_pack_description">Description</string>
+    <string name="ced_pack_info">Version %1$s · id %2$s. Publishing installs it (a new version each time).</string>
+    <string name="ced_intro">Write classifications like in Word: paste your text, then select lines and give them a style. Title = chapter, Subtitle = section, Sub-subtitle = one classification card. Deeper headings, lists and notes go inside a classification. Publish to see it in Classifications and in the patient picker.</string>
+    <string name="ced_chapters">Chapters</string>
+    <string name="ced_no_chapters">No chapter yet.</string>
+    <string name="ced_add_chapter">Add chapter</string>
+    <string name="ced_chapter_name">Chapter title</string>
+    <string name="ced_chapter_meta">%1$d sections · %2$d classifications</string>
+    <string name="ced_publish">Publish</string>
+    <string name="ced_export">Export as .OTips</string>
+    <string name="ced_delete_draft">Delete this draft</string>
+    <string name="ced_delete_draft_confirm">Delete this draft? Packs you already published stay installed.</string>
+    <string name="ced_delete_chapter_confirm">Delete this chapter from the draft?</string>
+    <string name="ced_published">%1$s published (version %2$s)</string>
+    <string name="ced_publish_failed">Could not publish: %1$s</string>
+    <string name="ced_create">Create</string>
+    <string name="ced_delete">Delete</string>
+    <string name="ced_move_up">Move up</string>
+    <string name="ced_move_down">Move down</string>
+    <string name="ced_untitled">Untitled chapter</string>
+    <string name="ced_saved">Saved</string>
+    <string name="ced_saving">Saving…</string>
+    <string name="ced_undo">Undo</string>
+    <string name="ced_redo">Redo</string>
+    <string name="ced_paste">Paste text</string>
+    <string name="ced_preview">Preview</string>
+    <string name="ced_select_all">Select all</string>
+    <string name="ced_clear_selection">Clear selection</string>
+    <string name="ced_help">How it works</string>
+    <string name="ced_help_body">• Tap a line to type in it. Enter starts a new line in the same list style.\n• Tap the left margin of lines to select several, then tap a style: it applies to all selected lines.\n• Title names the chapter. Subtitle starts a section. Sub-subtitle starts a classification card. Heading 3 and deeper (use Indent on a heading) structure a classification.\n• Bullets, numbering and letters nest with Indent / Outdent, as deep as you need.\n• Paste recognises -, •, 1., a) and indentation; tab-separated lines become a table.\n• Tables: one row per line, cells separated by |.</string>
+    <string name="ced_paste_hint">Lists (-, •, 1., a)) and indentation are recognised. You can restyle any line afterwards.</string>
+    <string name="ced_insert">Insert</string>
+    <string name="ced_style_title">Title</string>
+    <string name="ced_style_subtitle">Subtitle</string>
+    <string name="ced_style_subsubtitle">Sub-subtitle</string>
+    <string name="ced_style_heading3">Heading 3</string>
+    <string name="ced_style_text">Text</string>
+    <string name="ced_style_note">Note</string>
+    <string name="ced_style_bullets">• Bullets</string>
+    <string name="ced_style_numbered">1. Numbered</string>
+    <string name="ced_style_lettered">a. Lettered</string>
+    <string name="ced_outdent">Outdent</string>
+    <string name="ced_indent">Indent</string>
+    <string name="ced_new_line">New line</string>
+    <string name="ced_insert_image">Insert image</string>
+    <string name="ced_insert_table">Insert table</string>
+    <string name="ced_image_missing">Image not found</string>
+    <string name="ced_type_here">Type here</string>
+    <string name="ced_table_hint">Cell | Cell (one row per line)</string>
+</resources>

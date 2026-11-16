@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_extensions">Extensions</string>
+    <string name="ext_hub_subtitle">Guides, classifications et outils</string>
+    <string name="ext_hub_tab_manage">Gérer</string>
+
+    <string name="ext_your_extensions">Vos extensions</string>
+    <string name="ext_import">Importer</string>
+    <string name="ext_import_file">Importer une extension</string>
+    <string name="ext_empty_title">Aucune extension</string>
+    <string name="ext_empty_body">Les extensions sont des paquets .OTips : guides opératoires, classifications et petits outils. Installez celles fournies avec l’application, ou importez les vôtres.</string>
+    <string name="ext_privacy_note">Les extensions tournent isolées et ne voient pas vos patients. Elles n’accèdent à Internet ou à la bibliothèque de référence que si elles le demandent. Ce qu’elles enregistrent reste sur ce téléphone et disparaît quand vous les supprimez.</string>
+    <string name="ext_meta">v%1$s · %2$s</string>
+    <string name="ext_uses_internet">Utilise Internet</string>
+    <string name="ext_more">Plus d’options</string>
+
+    <string name="ext_action_open">Ouvrir</string>
+    <string name="ext_action_details">Détails</string>
+    <string name="ext_action_export">Exporter en .OTips</string>
+    <string name="ext_action_clear_data">Effacer ses données</string>
+    <string name="ext_action_delete">Supprimer</string>
+
+    <string name="ext_delete_title">Supprimer %1$s ?</string>
+    <string name="ext_delete_body">L’extension et tout ce qu’elle a enregistré sur ce téléphone seront supprimés. Si elle a son propre bouton de sauvegarde, faites d’abord une sauvegarde.</string>
+    <string name="ext_delete_body_operative_guide">Le guide opératoire et les données importées dans ce guide seront supprimés de ce téléphone. Vos favoris et notes de cas sont conservés et reviennent si vous importez à nouveau les mêmes données.</string>
+    <string name="ext_delete">Supprimer</string>
+    <string name="ext_clear_title">Effacer les données de %1$s ?</string>
+    <string name="ext_clear_body">Tout ce que l’extension a enregistré (progression, réglages, fichiers) est effacé. L’extension reste installée.</string>
+    <string name="ext_clear">Effacer</string>
+    <string name="ext_cancel">Annuler</string>
+
+    <string name="ext_msg_installed">%1$s installée</string>
+    <string name="ext_msg_updated">%1$s mise à jour en version %2$s</string>
+    <string name="ext_msg_deleted">%1$s supprimée</string>
+    <string name="ext_msg_data_cleared">Données de %1$s effacées</string>
+    <string name="ext_msg_exported">Fichier de l’extension enregistré</string>
+    <string name="ext_msg_export_failed">Impossible d’enregistrer le fichier</string>
+    <string name="ext_msg_converted">%1$s empaquetée en .OTips</string>
+    <string name="ext_cannot_open">Cette extension nécessite une version plus récente d’Ortho Tips.</string>
+
+    <string name="ext_details_kind">Type</string>
+    <string name="ext_details_version">Version</string>
+    <string name="ext_details_author">Auteur</string>
+    <string name="ext_details_source">Origine</string>
+    <string name="ext_details_size">Taille</string>
+    <string name="ext_details_updated">Dernière installation</string>
+    <string name="ext_details_permissions">Accès accordés</string>
+
+    <string name="ext_import_title">Importer une extension</string>
+    <string name="ext_import_pick_title">Depuis un fichier</string>
+    <string name="ext_import_pick_body">Choisissez un fichier d’extension .OTips sur ce téléphone. Il est vérifié avant toute installation.</string>
+    <string name="ext_import_pick_button">Choisir un fichier .OTips</string>
+    <string name="ext_convert_action">Convertir un programme HTML en .OTips</string>
+    <string name="ext_section_updates">Mises à jour disponibles</string>
+    <string name="ext_section_bundled">Extensions fournies</string>
+    <string name="ext_section_bundled_empty">Aucune extension n’est fournie avec cette version.</string>
+    <string name="ext_section_installed">Extensions installées</string>
+    <string name="ext_section_installed_empty">Rien d’installé pour l’instant.</string>
+    <string name="ext_section_external">Extensions externes</string>
+
+    <string name="ext_status_new">Non installée</string>
+    <string name="ext_status_installed">Déjà installée</string>
+    <string name="ext_status_changed">Autre édition de la v%1$s</string>
+    <string name="ext_status_update">Mise à jour : v%1$s → v%2$s</string>
+    <string name="ext_status_older">Plus ancienne que la v%1$s installée</string>
+    <string name="ext_action_install">Installer</string>
+    <string name="ext_action_update">Mettre à jour</string>
+    <string name="ext_action_reinstall">Réinstaller</string>
+    <string name="ext_action_downgrade">Installer cette ancienne version</string>
+
+    <string name="ext_source_bundled">Fournie</string>
+    <string name="ext_source_external">Importée</string>
+    <string name="ext_source_legacy">Importée (HTML)</string>
+
+    <string name="ext_kind_html">Outil</string>
+    <string name="ext_kind_operative_guide">Guide opératoire</string>
+    <string name="ext_kind_classifications">Classifications</string>
+    <string name="ext_kind_other">Extension</string>
+
+    <string name="ext_review_version">Version %1$s</string>
+    <string name="ext_review_by">Par %1$s</string>
+    <string name="ext_review_requests">Cette extension demande :</string>
+    <string name="ext_review_no_permissions">Aucun accès particulier.</string>
+
+    <string name="ext_perm_internet">Accès à Internet</string>
+    <string name="ext_perm_database">Lecture de la bibliothèque de référence clinique</string>
+    <string name="ext_perm_storage">Enregistrement de fichiers sur ce téléphone</string>
+    <string name="ext_perm_assets">Lecture de ses propres fichiers intégrés</string>
+    <string name="ext_perm_import_export">Import et export de fichiers</string>
+    <string name="ext_perm_sms">Lecture des SMS bancaires : débits, crédits et soldes (jamais les codes)</string>
+    <string name="ext_perm_notifications">Notifications — rappels affichés même application fermée</string>
+    <string name="ext_perm_background">Lecture audio en arrière-plan — écran éteint, commandes dans le panneau de notifications</string>
+
+    <string name="ext_error_unreadable">Impossible de lire ce fichier.</string>
+    <string name="ext_error_not_a_package">Ce fichier n’est pas une extension .OTips.</string>
+    <string name="ext_error_corrupted">Cette extension est endommagée ou a été modifiée. Elle n’a pas été installée.</string>
+    <string name="ext_error_unsupported_format">Cette extension a été créée pour une version plus récente d’Ortho Tips.</string>
+    <string name="ext_error_outdated_package">Ce fichier d’extension a été créé par une ancienne version de test d’Ortho Tips. Exportez-le à nouveau depuis l’application qui l’a créé.</string>
+    <string name="ext_error_unsupported_kind">Ce type d’extension nécessite une version plus récente d’Ortho Tips.</string>
+    <string name="ext_error_requires_newer_app">Cette extension nécessite une version plus récente d’Ortho Tips.</string>
+    <string name="ext_error_invalid_manifest">La description de cette extension est invalide.</string>
+    <string name="ext_error_invalid_content">Le contenu de cette extension est incomplet.</string>
+    <string name="ext_error_not_html">Ce fichier n’est pas un programme HTML.</string>
+    <string name="ext_error_too_large">Ce fichier est trop volumineux.</string>
+    <string name="ext_error_install_failed">L’extension n’a pas pu être installée.</string>
+    <string name="ext_error_storage_failed">L’extension n’a pas pu être enregistrée sur ce téléphone.</string>
+
+    <string name="ext_back">Retour</string>
+    <string name="ext_reload">Recharger</string>
+    <string name="ext_console">Console</string>
+    <string name="ext_console_errors">Console (%1$d erreurs)</string>
+    <string name="ext_console_empty">Aucun message.</string>
+    <string name="ext_clear_console">Vider</string>
+    <string name="ext_close">Fermer</string>
+    <string name="ext_not_found">Cette extension n’est plus installée.</string>
+    <string name="ext_file_saved">Fichier enregistré</string>
+    <string name="ext_file_save_failed">Impossible d’enregistrer le fichier</string>
+    <!-- Bank SMS notifications -->
+    <string name="sms_notif_channel">Opérations bancaires par SMS</string>
+    <string name="sms_notif_debit">Dépense CCP : −%1$s DA</string>
+    <string name="sms_notif_credit">Revenu CCP : +%1$s DA</string>
+    <string name="sms_notif_balance">Nouveau solde : %1$s DA</string>
+    <string name="sms_notif_open">Touchez pour ouvrir</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ext_grid_add">Ajouter</string>
+    <string name="ext_grid_options">Options</string>
+    <string name="ext_grid_hint">Touchez une extension pour l’ouvrir. Appui long pour ses options : détails, exporter, effacer ses données, supprimer.</string>
+    <string name="ext_grid_back">Retour aux extensions</string>
+</resources>

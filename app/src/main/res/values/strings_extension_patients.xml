@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Permission `patients` (OrthoTips.patients). -->
+<resources>
+    <string name="ext_perm_patients">Patient records — read, create and update your patients and add media (never delete). Sensitive data.</string>
+</resources>

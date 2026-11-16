@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Classification editor (Word-style). -->
+<resources>
+    <string name="ced_title">Éditeur de classifications</string>
+    <string name="ced_open_editor">Éditeur de classifications</string>
+    <string name="ced_new_pack">Nouveau paquet</string>
+    <string name="ced_your_drafts">Vos paquets</string>
+    <string name="ced_no_drafts">Aucun paquet pour l’instant. Créez-en un, ou modifiez un paquet installé ci-dessous.</string>
+    <string name="ced_installed_packs">Paquets installés</string>
+    <string name="ced_no_installed_packs">Aucun paquet de classifications n’est installé.</string>
+    <string name="ced_edit">Modifier</string>
+    <string name="ced_draft_meta">v%1$s · %2$d chapitres</string>
+    <string name="ced_pack_name">Nom du paquet</string>
+    <string name="ced_pack_description">Description</string>
+    <string name="ced_pack_info">Version %1$s · id %2$s. Publier l’installe (une nouvelle version à chaque fois).</string>
+    <string name="ced_intro">Écrivez vos classifications comme dans Word : collez votre texte, puis sélectionnez des lignes et donnez-leur un style. Titre = chapitre, Sous-titre = section, Sous-sous-titre = une fiche de classification. Les titres plus profonds, listes et notes vont dans une classification. Publiez pour la voir dans Classifications et dans le choix pour les patients.</string>
+    <string name="ced_chapters">Chapitres</string>
+    <string name="ced_no_chapters">Aucun chapitre.</string>
+    <string name="ced_add_chapter">Ajouter un chapitre</string>
+    <string name="ced_chapter_name">Titre du chapitre</string>
+    <string name="ced_chapter_meta">%1$d sections · %2$d classifications</string>
+    <string name="ced_publish">Publier</string>
+    <string name="ced_export">Exporter en .OTips</string>
+    <string name="ced_delete_draft">Supprimer ce brouillon</string>
+    <string name="ced_delete_draft_confirm">Supprimer ce brouillon ? Les paquets déjà publiés restent installés.</string>
+    <string name="ced_delete_chapter_confirm">Supprimer ce chapitre du brouillon ?</string>
+    <string name="ced_published">%1$s publié (version %2$s)</string>
+    <string name="ced_publish_failed">Publication impossible : %1$s</string>
+    <string name="ced_create">Créer</string>
+    <string name="ced_delete">Supprimer</string>
+    <string name="ced_move_up">Monter</string>
+    <string name="ced_move_down">Descendre</string>
+    <string name="ced_untitled">Chapitre sans titre</string>
+    <string name="ced_saved">Enregistré</string>
+    <string name="ced_saving">Enregistrement…</string>
+    <string name="ced_undo">Annuler</string>
+    <string name="ced_redo">Rétablir</string>
+    <string name="ced_paste">Coller du texte</string>
+    <string name="ced_preview">Aperçu</string>
+    <string name="ced_select_all">Tout sélectionner</string>
+    <string name="ced_clear_selection">Désélectionner</string>
+    <string name="ced_help">Mode d’emploi</string>
+    <string name="ced_help_body">• Touchez une ligne pour écrire. Entrée crée une nouvelle ligne dans le même style de liste.\n• Touchez la marge gauche de plusieurs lignes pour les sélectionner, puis touchez un style : il s’applique à toutes.\n• Titre nomme le chapitre. Sous-titre ouvre une section. Sous-sous-titre ouvre une fiche de classification. Titre 3 et plus profond (Retrait sur un titre) structurent une classification.\n• Puces, numéros et lettres s’imbriquent avec Retrait / Retrait négatif, aussi profond que nécessaire.\n• Coller reconnaît -, •, 1., a) et l’indentation ; les lignes séparées par des tabulations deviennent un tableau.\n• Tableaux : une ligne par rangée, cellules séparées par |.</string>
+    <string name="ced_paste_hint">Les listes (-, •, 1., a)) et l’indentation sont reconnues. Vous pouvez restyler chaque ligne ensuite.</string>
+    <string name="ced_insert">Insérer</string>
+    <string name="ced_style_title">Titre</string>
+    <string name="ced_style_subtitle">Sous-titre</string>
+    <string name="ced_style_subsubtitle">Sous-sous-titre</string>
+    <string name="ced_style_heading3">Titre 3</string>
+    <string name="ced_style_text">Texte</string>
+    <string name="ced_style_note">Note</string>
+    <string name="ced_style_bullets">• Puces</string>
+    <string name="ced_style_numbered">1. Numéros</string>
+    <string name="ced_style_lettered">a. Lettres</string>
+    <string name="ced_outdent">Retrait négatif</string>
+    <string name="ced_indent">Retrait</string>
+    <string name="ced_new_line">Nouvelle ligne</string>
+    <string name="ced_insert_image">Insérer une image</string>
+    <string name="ced_insert_table">Insérer un tableau</string>
+    <string name="ced_image_missing">Image introuvable</string>
+    <string name="ced_type_here">Écrivez ici</string>
+    <string name="ced_table_hint">Cellule | Cellule (une rangée par ligne)</string>
+</resources>
