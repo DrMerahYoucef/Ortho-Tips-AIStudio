@@ -73,19 +73,28 @@ value class StorageKey(val value: String) {
         fun patientPrefix(patientId: String): String = "patients/$patientId/"
 
         /**
-         * Snapshot keys carry their row count: `ortho-db-{millis}-r{rows}.json`.
+         * Snapshot keys carry their row and patient counts:
+         * `ortho-db-{millis}-r{rows}-p{patients}.json` (older versions wrote
+         * `ortho-db-{millis}-r{rows}.json` or `ortho-db-{millis}.json`).
          *
-         * It looks like a hack and it earns its place. Restore has to pick a
-         * snapshot that actually contains records, and without the count in the
-         * name that decision needs a download per candidate. It also survives a
-         * manifest rebuild, because the name is what Telegram stores.
+         * Restore has to pick a snapshot that actually contains patients, and
+         * carrying the count in the key avoids downloading older empty backups
+         * during recovery and manifest rebuilds.
          */
-        fun snapshot(timestamp: Long, rowCount: Int): StorageKey =
-            StorageKey("snapshots/ortho-db-$timestamp-r$rowCount.json")
+        fun snapshot(timestamp: Long, rowCount: Int, patientCount: Int? = null): StorageKey =
+            if (patientCount != null) {
+                StorageKey("snapshots/ortho-db-$timestamp-r$rowCount-p$patientCount.json")
+            } else {
+                StorageKey("snapshots/ortho-db-$timestamp-r$rowCount.json")
+            }
 
-        /** Row count encoded in a snapshot key; null for pre-v2 keys. */
+        /** Total row count encoded in a snapshot key; null for pre-v2 keys. */
         fun snapshotRowCount(key: StorageKey): Int? =
-            Regex("-r(\\d+)\\.json$").find(key.fileName)?.groupValues?.get(1)?.toIntOrNull()
+            Regex("-r(\\d+)(?:-p\\d+)?\\.json$").find(key.fileName)?.groupValues?.get(1)?.toIntOrNull()
+
+        /** Patient row count encoded in a snapshot key; null for pre-v3 keys. */
+        fun snapshotPatientCount(key: StorageKey): Int? =
+            Regex("-p(\\d+)\\.json$").find(key.fileName)?.groupValues?.get(1)?.toIntOrNull()
 
         const val SNAPSHOT_PREFIX = "snapshots/"
         const val PATIENTS_PREFIX = "patients/"

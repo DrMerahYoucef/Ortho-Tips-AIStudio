@@ -544,6 +544,328 @@ class SyncEngineAndSnapshotTest {
         assertNotNull("KEEP_EVERYTHING must enqueue full-size missing media", db.transferQueueDao().findActiveFor(fullKey.value))
     }
 
+    @Test
+    fun `snapshot exports and imports strictly patient tables ignoring shifts and atlas`() = runBlocking {
+        // Populate shifts + chapter + field suggestion alongside one patient + image.
+        val writable = db.openHelper.writableDatabase
+        writable.execSQL("INSERT INTO shifts (date, label, createdAt) VALUES ('2026-11-16', 'Night ER', 100)")
+        writable.execSQL(
+            "INSERT INTO chapters (id, title, description, icon, orderIndex) VALUES ('ch-1', 'Local Chapter', 'Desc', 'bone', 1)"
+        )
+        writable.execSQL(
+            "INSERT INTO field_suggestions (fieldKey, value, useCount, lastUsedAt) VALUES ('diag', 'Colles', 3, 200)"
+        )
+        db.patientDao().insertPatient(
+            PatientEntity(id = "p-only", patientCode = "PO-1", fullName = "Patient Only")
+        )
+        db.patientImageDao().insertImage(
+            com.example.data.local.entity.PatientImageEntity(
+                id = "img-only",
+                patientId = "p-only",
+                filePath = File(context.filesDir, "patients/p-only/images/img-only.jpg").absolutePath,
+                thumbnailPath = File(context.filesDir, "patients/p-only/images/thumbs/img-only.jpg").absolutePath
+            )
+        )
+
+        val snapFile = File(testRoot, "patients-only.json")
+        val exported = DatabaseSnapshot(db, context.filesDir).export(snapFile)
+        assertEquals(1, exported.patientCount)
+        assertEquals(2, exported.rowCount) // 1 patient + 1 image (shifts/chapters/suggestions excluded)
+
+        val json = org.json.JSONObject(snapFile.readText())
+        val tablesJson = json.getJSONObject("tables")
+        assertFalse(tablesJson.has("shifts"))
+        assertFalse(tablesJson.has("chapters"))
+        assertFalse(tablesJson.has("field_suggestions"))
+        assertTrue(tablesJson.has("patients"))
+
+        // Legacy mixed snapshot from another device (contains shifts + chapters + cross-device filePath).
+        val legacySnapFile = File(testRoot, "legacy-mixed.json")
+        val legacyRoot = org.json.JSONObject().apply {
+            put("format", 1)
+            put("createdAt", 5_000L)
+            put("tables", org.json.JSONObject().apply {
+                put("shifts", org.json.JSONArray().put(org.json.JSONObject().apply {
+                    put("date", "2026-11-16")
+                    put("label", "REMOTE OVERWRITE ATTEMPT")
+                    put("createdAt", 999L)
+                }))
+                put("chapters", org.json.JSONArray().put(org.json.JSONObject().apply {
+                    put("id", "ch-1")
+                    put("title", "REMOTE CHAPTER")
+                    put("description", "Remote")
+                    put("icon", "bone")
+                    put("orderIndex", 1)
+                }))
+                put("patients", org.json.JSONArray().put(org.json.JSONObject().apply {
+                    put("id", "p-legacy")
+                    put("patientCode", "LEG-1")
+                    put("fullName", "Legacy Patient")
+                    put("gender", "")
+                    put("phone", "")
+                    put("email", "")
+                    put("address", "")
+                    put("emergencyContactName", "")
+                    put("emergencyContactPhone", "")
+                    put("insuranceProvider", "")
+                    put("insuranceNumber", "")
+                    put("medicalHistory", "")
+                    put("allergies", "")
+                    put("chronicDiseases", "")
+                    put("previousSurgeries", "")
+                    put("medications", "")
+                    put("generalNotes", "")
+                    put("diagnosis", "")
+                    put("bodyRegion", "")
+                    put("side", "")
+                    put("traumaMechanism", "")
+                    put("fractureClassification", "")
+                    put("imagingFindings", "")
+                    put("treatmentPlan", "")
+                    put("isArchived", 0)
+                    put("createdAt", 100L)
+                    put("updatedAt", 100L)
+                }))
+                put("patient_images", org.json.JSONArray().put(org.json.JSONObject().apply {
+                    put("id", "img-legacy")
+                    put("patientId", "p-legacy")
+                    put("category", "OTHER")
+                    put("filePath", "/data/user/10/other.pkg/files/patients/p-legacy/images/img-legacy.jpg")
+                    put("thumbnailPath", "/data/user/10/other.pkg/files/patients/p-legacy/images/thumbs/img-legacy.jpg")
+                    put("ocrText", "")
+                    put("annotationsJson", "")
+                    put("notes", "")
+                    put("mediaType", "IMAGE")
+                    put("durationMs", 0L)
+                    put("capturedAt", 100L)
+                }))
+            })
+        }
+        legacySnapFile.writeText(legacyRoot.toString())
+
+        val targetDb = Room.inMemoryDatabaseBuilder(context, OrthoDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val targetWritable = targetDb.openHelper.writableDatabase
+            targetWritable.execSQL("INSERT INTO shifts (date, label, createdAt) VALUES ('2026-11-16', 'Keep My Shift', 1)")
+            targetWritable.execSQL(
+                "INSERT INTO chapters (id, title, description, icon, orderIndex) VALUES ('ch-1', 'Keep My Atlas', 'Desc', 'bone', 1)"
+            )
+
+            val snapHelper = DatabaseSnapshot(targetDb, context.filesDir)
+            val inspected = snapHelper.inspect(legacySnapFile)!!
+            assertEquals(1, inspected.patientCount)
+            assertEquals(2, inspected.rowCount)
+
+            snapHelper.import(legacySnapFile)
+
+            assertNotNull(targetDb.patientDao().getPatientDirect("p-legacy"))
+            val restoredImg = targetDb.patientImageDao().getImageDirect("img-legacy")
+            assertEquals(
+                File(context.filesDir, "patients/p-legacy/images/img-legacy.jpg").absolutePath,
+                restoredImg?.filePath
+            )
+            val localShiftLabel = targetDb.openHelper.readableDatabase
+                .query("SELECT label FROM shifts WHERE date = '2026-11-16'")
+                .use { c -> assertTrue(c.moveToFirst()); c.getString(0) }
+            assertEquals("Keep My Shift", localShiftLabel)
+            val localChapterTitle = targetDb.openHelper.readableDatabase
+                .query("SELECT title FROM chapters WHERE id = 'ch-1'")
+                .use { c -> assertTrue(c.moveToFirst()); c.getString(0) }
+            assertEquals("Keep My Atlas", localChapterTitle)
+        } finally {
+            targetDb.close()
+        }
+    }
+
+    @Test
+    fun `zero patient device auto restores older patient backup behind newer empty r1475 snapshot and stale watermark`() = runBlocking {
+        val chatId = 888L
+        val fakeClient = FakeTelegramClient(testRoot)
+        val keystore = KeystoreManager()
+        val driveRepo = TelegramDriveRepository(context, keystore).apply {
+            setChatId(chatId)
+            setBackend(StorageBackend.TELEGRAM)
+            setSetupCompleted(true)
+            setEncryptUploads(false)
+            // Simulate device already having pushed/seen timestamp 5000 from an empty atlas snapshot.
+            markSnapshotPushed(5000L, "stale-empty-hash")
+        }
+        val streamCrypto = StreamCrypto()
+        val wrappedKeys = WrappedKeyRepository(context, keystore)
+        val codec = ManifestCodec(streamCrypto, wrappedKeys)
+        val localProvider = LocalStorageProvider(context, context.filesDir)
+        val telegramProvider = TelegramStorageProvider(
+            context = context,
+            client = fakeClient,
+            remoteObjectDao = db.remoteObjectDao(),
+            manifestCodec = codec,
+            streamCrypto = streamCrypto,
+            wrappedKeys = wrappedKeys,
+            driveRepository = driveRepo
+        )
+        val monitor = com.example.data.sync.SyncProgressMonitor()
+        val snapshot = DatabaseSnapshot(db, context.filesDir)
+        val engine = SyncEngine(
+            registry = com.example.data.storage.StorageProviderRegistry(localProvider, telegramProvider, driveRepo),
+            telegram = telegramProvider,
+            local = localProvider,
+            client = fakeClient,
+            remoteObjectDao = db.remoteObjectDao(),
+            transferQueueDao = db.transferQueueDao(),
+            tombstoneDao = db.syncTombstoneDao(),
+            manifestCodec = codec,
+            databaseSnapshot = snapshot,
+            driveRepository = driveRepo,
+            localRootDir = context.filesDir,
+            snapshotWorkDir = File(testRoot, "snapwork2").apply { mkdirs() },
+            progressMonitor = monitor
+        )
+
+        // Newer legacy snapshot containing 0 patients (atlas/shift only -> r1475).
+        val emptyAtlasBytes = org.json.JSONObject().apply {
+            put("format", 1)
+            put("createdAt", 5000L)
+            put("tables", org.json.JSONObject().apply {
+                put("shifts", org.json.JSONArray().put(org.json.JSONObject().apply {
+                    put("date", "2026-11-16")
+                    put("label", "Empty Snap Shift")
+                    put("createdAt", 10L)
+                }))
+                put("patients", org.json.JSONArray())
+            })
+        }.toString().toByteArray()
+
+        // Older snapshot containing the actual recovered patient.
+        val remoteDb = Room.inMemoryDatabaseBuilder(context, OrthoDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        remoteDb.patientDao().insertPatient(
+            PatientEntity(id = "p-recovered", patientCode = "REC-1", fullName = "Recovered Patient")
+        )
+        val realSnapFile = File(testRoot, "real-snap.json")
+        val realSummary = DatabaseSnapshot(remoteDb, context.filesDir).export(realSnapFile)
+        remoteDb.close()
+        val realBytes = realSnapFile.readBytes()
+
+        val emptyKey = StorageKey.snapshot(5000L, 1475) // Legacy key without -p0
+        val realKey = StorageKey.snapshot(3000L, 1476)
+        fakeClient.putBlob("rf_empty", emptyAtlasBytes)
+        fakeClient.putBlob("rf_real", realBytes)
+
+        fakeClient.pages[0L] = RemoteDocumentPage(
+            documents = listOf(
+                RemoteDocument(
+                    chatId = chatId,
+                    messageId = 200L,
+                    remoteFileId = "rf_empty",
+                    uniqueFileId = "u_empty",
+                    fileName = "empty.json",
+                    mimeType = "application/json",
+                    sizeBytes = emptyAtlasBytes.size.toLong(),
+                    caption = codec.encode(
+                        DriveManifest(
+                            storageKey = emptyKey.value,
+                            name = emptyKey.fileName,
+                            kind = StorageObjectKind.DATABASE_SNAPSHOT.name,
+                            mimeType = "application/json",
+                            sizeBytes = emptyAtlasBytes.size.toLong(),
+                            contentHash = Hashing.sha256(emptyAtlasBytes),
+                            encrypted = false,
+                            createdAt = 5000L,
+                            modifiedAt = 5000L
+                        ),
+                        encrypt = false
+                    ),
+                    dateSeconds = 200
+                ),
+                RemoteDocument(
+                    chatId = chatId,
+                    messageId = 100L,
+                    remoteFileId = "rf_real",
+                    uniqueFileId = "u_real",
+                    fileName = "real.json",
+                    mimeType = "application/json",
+                    sizeBytes = realBytes.size.toLong(),
+                    caption = codec.encode(
+                        DriveManifest(
+                            storageKey = realKey.value,
+                            name = realKey.fileName,
+                            kind = StorageObjectKind.DATABASE_SNAPSHOT.name,
+                            mimeType = "application/json",
+                            sizeBytes = realBytes.size.toLong(),
+                            contentHash = Hashing.sha256(realBytes),
+                            encrypted = false,
+                            createdAt = 3000L,
+                            modifiedAt = 3000L
+                        ),
+                        encrypt = false
+                    ),
+                    dateSeconds = 100
+                )
+            ),
+            nextFromMessageId = 0L
+        )
+
+        // Local device has 0 patients + a local shift that must NOT be overwritten.
+        db.openHelper.writableDatabase.execSQL(
+            "INSERT INTO shifts (date, label, createdAt) VALUES ('2026-11-16', 'My Local Shift', 5)"
+        )
+
+        val report = engine.sync(SyncScope.FULL, ConflictPolicy.NEWEST_WINS)
+        assertTrue("Sync should succeed: ${report.errors}", report.succeeded)
+        assertTrue("Sync must auto-pull the older snapshot with patients", report.snapshotPulled)
+        assertEquals("Recovered Patient", db.patientDao().getPatientDirect("p-recovered")?.fullName)
+
+        // Monitor tracks restoration explanation + stays visible until dismissed.
+        val status = monitor.status.value
+        assertEquals(1, status.restoredPatientCount)
+        assertTrue(status.explanations.any {
+            it.code == com.example.data.sync.ExplanationCode.AUTO_RESTORED_PATIENTS
+        })
+        assertFalse(status.dismissed)
+        monitor.dismiss()
+        assertTrue(monitor.status.value.dismissed)
+        monitor.onSyncStarted(SyncScope.INCREMENTAL, 1)
+        assertFalse("New sync run must reopen dismissed banner", monitor.status.value.dismissed)
+    }
+
+    @Test
+    fun `storage key snapshot parser and diagnostic report formatting support v2 and v3 keys`() {
+        val v3 = StorageKey.snapshot(1234L, rowCount = 12, patientCount = 3)
+        assertEquals(12, StorageKey.snapshotRowCount(v3))
+        assertEquals(3, StorageKey.snapshotPatientCount(v3))
+
+        val v2 = StorageKey.snapshot(1234L, rowCount = 1475)
+        assertEquals(1475, StorageKey.snapshotRowCount(v2))
+        assertEquals(null, StorageKey.snapshotPatientCount(v2))
+
+        val resolved = com.example.ui.components.buildResolvedExplanations(
+            live = com.example.data.sync.SyncLiveStatus(),
+            failedTransfers = 2,
+            lastSyncError = ""
+        )
+        assertTrue(resolved.any { it.code == com.example.data.sync.ExplanationCode.TRANSFER_FAILURES })
+
+        val dump = com.example.ui.components.buildSyncDiagnosticReport(
+            context = context,
+            live = com.example.data.sync.SyncLiveStatus(
+                phase = com.example.data.sync.SyncPhase.COMPLETED,
+                scope = SyncScope.FULL,
+                manifestRowsSeen = 31
+            ),
+            totalPatients = 3,
+            pendingUploads = 1,
+            pendingDownloads = 2,
+            failedTransfers = 0,
+            explanations = resolved,
+            logsDump = "18:40:59 I/SyncEngine: Sync full done"
+        )
+        assertTrue(dump.contains("patients & patient media only"))
+        assertTrue(dump.contains("18:40:59 I/SyncEngine: Sync full done"))
+    }
+
     private class FakeTelegramClient(private val root: File) : TelegramClient {
         private val _authState = MutableStateFlow<TelegramAuthState>(TelegramAuthState.Ready)
         override val authState: StateFlow<TelegramAuthState> = _authState.asStateFlow()

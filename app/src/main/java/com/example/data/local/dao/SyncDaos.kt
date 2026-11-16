@@ -101,6 +101,12 @@ interface TransferQueueDao {
     @Query("SELECT * FROM transfer_queue ORDER BY updatedAt DESC LIMIT :limit")
     fun observeHistory(limit: Int): Flow<List<TransferQueueEntity>>
 
+    @Query(
+        "SELECT * FROM transfer_queue WHERE state IN ('RUNNING', 'PENDING') " +
+                "ORDER BY CASE WHEN state = 'RUNNING' THEN 0 ELSE 1 END, createdAt ASC LIMIT :limit"
+    )
+    fun observeActiveTransfers(limit: Int = 20): Flow<List<TransferQueueEntity>>
+
     @Query("SELECT * FROM transfer_queue WHERE state = 'FAILED'")
     suspend fun getFailed(): List<TransferQueueEntity>
 

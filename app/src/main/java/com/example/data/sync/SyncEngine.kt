@@ -13,12 +13,12 @@ import com.example.data.prefs.TelegramDriveRepository
 import com.example.data.storage.LocalStorageProvider
 import com.example.data.storage.StorageBackend
 import com.example.data.storage.StorageException
-import com.example.data.storage.awaitTerminal
 import com.example.data.storage.StorageKey
 import com.example.data.storage.StorageObjectKind
 import com.example.data.storage.StorageProviderRegistry
 import com.example.data.storage.TelegramStorageProvider
 import com.example.data.storage.TransferProgress
+import com.example.data.storage.awaitTerminal
 import com.example.data.telegram.DriveLog
 import com.example.data.telegram.TelegramClient
 import kotlinx.coroutines.Dispatchers
@@ -80,17 +80,11 @@ data class SyncReport(
 }
 
 /**
- * Coordinates the drive: what to push, what to pull, and what to do when the two
- * sides disagree.
+ * Coordinates the drive: patient records (`patients`, `surgeries`, `timeline_events`,
+ * `patient_images`, `patient_documents`) and patient media (`patients/...`).
  *
- * The engine never transfers bytes itself. It plans work into `transfer_queue`
- * and lets [com.example.work.TransferQueueWorker] execute it under WorkManager
- * constraints, so a sync survives the app being backgrounded mid-upload and
- * resumes with the same backoff state.
- *
- * Deletion is propagated through tombstones rather than by absence. "Not in the
- * local set" is indistinguishable from "not downloaded yet", and treating those
- * the same is how sync engines destroy data.
+ * Non-patient tables (shifts, anatomical reference chapters/bones/sections/images,
+ * library notes/bookmarks, and suggestions) are never synchronized.
  */
 class SyncEngine(
     private val registry: StorageProviderRegistry,
@@ -105,7 +99,8 @@ class SyncEngine(
     private val driveRepository: TelegramDriveRepository,
     /** Root the local provider resolves keys against; download destinations live here. */
     private val localRootDir: File,
-    private val snapshotWorkDir: File
+    private val snapshotWorkDir: File,
+    private val progressMonitor: SyncProgressMonitor = SyncProgressMonitor()
 ) {
 
     private val syncMutex = Mutex()
@@ -118,45 +113,77 @@ class SyncEngine(
             val startedAt = System.currentTimeMillis()
             val errors = mutableListOf<String>()
             var retryableFailure = false
-            DriveLog.i(TAG, "Sync ${scope.name.lowercase()} started")
+            val initialPatients = databaseSnapshot.localPatientCount()
+            progressMonitor.onSyncStarted(scope, initialPatients)
+            DriveLog.i(TAG, "Sync ${scope.name.lowercase()} started (local patients: $initialPatients)")
 
             if (driveRepository.backend() != StorageBackend.TELEGRAM) {
                 DriveLog.w(TAG, "Sync skipped: Telegram Drive is not the selected backend")
-                return@withLock SyncReport(
+                progressMonitor.addExplanation(
+                    SyncExplanation(ExplanationCode.DRIVE_NOT_SELECTED, ExplanationSeverity.ERROR)
+                )
+                val report = SyncReport(
                     scope = scope,
                     errors = listOf("Telegram Drive is not the selected backend"),
                     hasRetryableFailure = false,
                     startedAt = startedAt
                 )
+                progressMonitor.onSyncFinished(report, initialPatients)
+                return@withLock report
             }
             if (!telegram.isReady()) {
                 DriveLog.w(TAG, "Sync skipped: Telegram Drive is not connected")
-                return@withLock SyncReport(
+                progressMonitor.addExplanation(
+                    SyncExplanation(ExplanationCode.DRIVE_NOT_CONNECTED, ExplanationSeverity.ERROR)
+                )
+                val report = SyncReport(
                     scope = scope,
                     errors = listOf("Telegram Drive is not connected"),
                     hasRetryableFailure = true,
                     startedAt = startedAt
                 )
+                progressMonitor.onSyncFinished(report, initialPatients)
+                return@withLock report
             }
 
             // Anything left RUNNING belongs to a process that no longer exists.
             transferQueueDao.requeueInterrupted(System.currentTimeMillis())
 
+            progressMonitor.updatePhase(SyncPhase.PULLING_MANIFEST)
             val pulled = runCatching { pullManifest(scope) }
                 .onFailure { err ->
                     errors += "Manifest pull failed: ${err.message}"
+                    progressMonitor.addExplanation(
+                        SyncExplanation(
+                            ExplanationCode.MANIFEST_PULL_FAILED,
+                            ExplanationSeverity.ERROR,
+                            err.message
+                        )
+                    )
                     if (isRetryableError(err)) retryableFailure = true
                 }
                 .getOrDefault(ManifestPull())
+
+            val remoteSnapshotsCount = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
+                .count { isPotentiallyNonEmptySnapshotKey(it.storageKey) }
+            progressMonitor.onManifestPulled(pulled.seen, pulled.unreadable, remoteSnapshotsCount)
 
             if (pulled.unreadable > 0) {
                 errors += "${pulled.unreadable} drive objects are encrypted with a key " +
                         "that is not on this device"
             }
 
+            progressMonitor.updatePhase(SyncPhase.SYNCING_DELETIONS)
             val tombstones = runCatching { propagateTombstones() }
                 .onFailure { err ->
                     errors += "Deletion propagation failed: ${err.message}"
+                    progressMonitor.addExplanation(
+                        SyncExplanation(
+                            ExplanationCode.DELETION_SYNC_FAILED,
+                            ExplanationSeverity.ERROR,
+                            err.message
+                        )
+                    )
                     if (isRetryableError(err)) retryableFailure = true
                 }
                 .getOrDefault(0)
@@ -164,30 +191,63 @@ class SyncEngine(
             runCatching { reconcileRemoteDeletions() }
                 .onFailure { err ->
                     errors += "Remote deletion sync failed: ${err.message}"
+                    progressMonitor.addExplanation(
+                        SyncExplanation(
+                            ExplanationCode.DELETION_SYNC_FAILED,
+                            ExplanationSeverity.ERROR,
+                            err.message
+                        )
+                    )
                     if (isRetryableError(err)) retryableFailure = true
                 }
 
+            progressMonitor.updatePhase(SyncPhase.RESTORING_PATIENTS)
+            val snapshotPulled = runCatching { pullNewerSnapshotIfAvailable() }
+                .onFailure { err ->
+                    errors += "Patient restore failed: ${err.message}"
+                    progressMonitor.addExplanation(
+                        SyncExplanation(
+                            ExplanationCode.SNAPSHOT_RESTORE_FAILED,
+                            ExplanationSeverity.ERROR,
+                            err.message
+                        )
+                    )
+                    if (isRetryableError(err)) retryableFailure = true
+                }
+                .getOrDefault(false)
+
+            progressMonitor.updatePhase(SyncPhase.PLANNING_MEDIA)
             val plan = runCatching { planTransfers(scope, policy) }
                 .onFailure { err ->
-                    errors += "Planning failed: ${err.message}"
+                    errors += "Media planning failed: ${err.message}"
+                    progressMonitor.addExplanation(
+                        SyncExplanation(
+                            ExplanationCode.PLANNING_FAILED,
+                            ExplanationSeverity.ERROR,
+                            err.message
+                        )
+                    )
                     if (isRetryableError(err)) retryableFailure = true
                 }
                 .getOrDefault(TransferPlan())
+            progressMonitor.onMediaPlanned(plan.uploads, plan.downloads)
 
-            val snapshotPulled = runCatching { pullNewerSnapshotIfAvailable() }
-                .onFailure { err ->
-                    errors += "Record restore failed: ${err.message}"
-                    if (isRetryableError(err)) retryableFailure = true
-                }
-                .getOrDefault(false)
-
+            progressMonitor.updatePhase(SyncPhase.BACKING_UP_PATIENTS)
             val snapshotPushed = runCatching { pushDatabaseSnapshot() }
                 .onFailure { err ->
-                    errors += "Record snapshot failed: ${err.message}"
+                    errors += "Patient snapshot upload failed: ${err.message}"
+                    progressMonitor.addExplanation(
+                        SyncExplanation(
+                            ExplanationCode.SNAPSHOT_PUSH_FAILED,
+                            ExplanationSeverity.ERROR,
+                            err.message
+                        )
+                    )
                     if (isRetryableError(err)) retryableFailure = true
                 }
                 .getOrDefault(false)
 
+            val finalPatients = databaseSnapshot.localPatientCount()
             val finishedAt = System.currentTimeMillis()
             val report = SyncReport(
                 scope = scope,
@@ -209,10 +269,11 @@ class SyncEngine(
             } else {
                 driveRepository.recordSyncFailure(errors.first())
             }
+            progressMonitor.onSyncFinished(report, finalPatients)
             DriveLog.i(
                 TAG,
                 "Sync ${scope.name.lowercase()} done in ${report.durationMillis}ms: " +
-                        "${plan.uploads} up, ${plan.downloads} down, ${errors.size} errors"
+                        "patients=$finalPatients, ${plan.uploads} up, ${plan.downloads} down, ${errors.size} errors"
             )
             report
         }
@@ -223,11 +284,6 @@ class SyncEngine(
 
     // ---- Pull ----------------------------------------------------------------
 
-    /**
-     * Reads the drive channel and refreshes the local index from the captions.
-     * On [SyncScope.FULL] the whole history is walked; incrementally it stops at
-     * the first page that produced no new or changed rows.
-     */
     private data class ManifestPull(
         val seen: Int = 0,
         val unreadable: Int = 0,
@@ -342,12 +398,14 @@ class SyncEngine(
     private suspend fun planTransfers(scope: SyncScope, policy: ConflictPolicy): TransferPlan {
         val cachePolicy = driveRepository.current().cachePolicy
         val localObjects = local.list(StorageKey.PATIENTS_PREFIX).associateBy { it.key.value }
-        val remoteObjects = remoteObjectDao.getAllLive().associateBy { it.storageKey }
+        val remoteObjects = remoteObjectDao.getAllLive()
+            .filter { it.storageKey.startsWith(StorageKey.PATIENTS_PREFIX) }
+            .associateBy { it.storageKey }
         val conflicts = mutableListOf<SyncConflict>()
         var uploads = 0
         var downloads = 0
 
-        // Local content the drive does not have, or has an older version of.
+        // Local patient media the drive does not have, or has an older version of.
         for ((keyValue, localObject) in localObjects) {
             val remote = remoteObjects[keyValue]
             val tombstone = tombstoneDao.get(keyValue)
@@ -402,10 +460,9 @@ class SyncEngine(
             }
         }
 
-        // Drive content this device has not stored locally yet, governed by CachePolicy.
+        // Drive patient media this device has not stored locally yet, governed by CachePolicy.
         for ((keyValue, remote) in remoteObjects) {
             if (localObjects.containsKey(keyValue)) continue
-            if (keyValue.startsWith(StorageKey.SNAPSHOT_PREFIX)) continue
             val key = runCatching { StorageKey(keyValue) }.getOrNull() ?: continue
 
             val tombstone = tombstoneDao.get(keyValue)
@@ -420,6 +477,7 @@ class SyncEngine(
 
             val kind = runCatching { StorageObjectKind.valueOf(remote.kind) }
                 .getOrDefault(StorageObjectKind.OTHER)
+            if (kind == StorageObjectKind.LIBRARY_FIGURE) continue
             val shouldDownload = when (cachePolicy) {
                 CachePolicy.KEEP_EVERYTHING -> true
                 CachePolicy.HYBRID -> kind.isThumbnail || scope == SyncScope.FULL
@@ -433,12 +491,6 @@ class SyncEngine(
         return TransferPlan(uploads, downloads, conflicts)
     }
 
-    /**
-     * Queues a single upload. Called by
-     * [com.example.data.storage.PatientMediaGateway] when a record is saved, so
-     * new media starts transferring immediately rather than waiting for the next
-     * periodic sync to notice it.
-     */
     suspend fun enqueueUpload(
         key: StorageKey,
         file: File,
@@ -486,7 +538,7 @@ class SyncEngine(
     }
 
     /**
-     * Moves local copies of remotely soft-deleted objects to `.trash` and cancels any
+     * Moves local copies of remotely soft-deleted patient media to `.trash` and cancels
      * active transfer queue rows for them so deleted items stay deleted across devices.
      */
     private suspend fun reconcileRemoteDeletions() {
@@ -494,7 +546,7 @@ class SyncEngine(
         for (row in deleted) {
             transferQueueDao.cancelActiveFor(row.storageKey)
             val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: continue
-            if (key.startsWith(StorageKey.SNAPSHOT_PREFIX)) continue
+            if (!key.startsWith(StorageKey.PATIENTS_PREFIX)) continue
             if (local.peek(key) != null) {
                 local.delete(key)
                 tombstoneDao.upsert(
@@ -521,61 +573,130 @@ class SyncEngine(
         )
     }
 
-    // ---- Records -------------------------------------------------------------
+    // ---- Patient Records -----------------------------------------------------
 
     /**
-     * Pulls and safely merges a newer remote database snapshot during normal sync,
-     * advancing [TelegramDriveRepository.snapshotWatermark] so it is only imported once.
+     * Pulls and safely merges remote patient snapshots during sync.
+     *
+     * When the device has 0 patients locally, stale watermarks / last-hashes are bypassed
+     * and candidate snapshots are inspected newest-first until finding the latest snapshot
+     * that actually contains patient rows (skipping older atlas-only/empty snapshots).
      */
     private suspend fun pullNewerSnapshotIfAvailable(): Boolean {
+        val localPatients = databaseSnapshot.localPatientCount()
         val watermark = driveRepository.snapshotWatermark()
         val lastHash = driveRepository.current().lastSnapshotHash
-        val newest = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
-            .filter { row ->
-                val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: return@filter false
-                (StorageKey.snapshotRowCount(key) ?: 1) > 0
+
+        val allSnapshots = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
+            .sortedByDescending { it.modifiedAt }
+
+        val candidates = allSnapshots.filter { row ->
+            isPotentiallyNonEmptySnapshotKey(row.storageKey)
+        }
+
+        if (candidates.isEmpty()) return false
+
+        if (localPatients == 0) {
+            DriveLog.i(
+                TAG,
+                "Local DB has 0 patients; scanning ${candidates.size} Drive snapshots for patient backup"
+            )
+            var inspected = 0
+            for (row in candidates) {
+                val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: continue
+                if (inspected++ >= MAX_SNAPSHOT_CANDIDATES) break
+
+                val file = telegram.materialize(key) ?: continue
+                val summary = databaseSnapshot.inspect(file)
+                if (summary == null || summary.patientCount == 0) {
+                    DriveLog.d(
+                        TAG,
+                        "Snapshot ${key.fileName} contains 0 patients (empty/atlas-only); trying older backup"
+                    )
+                    continue
+                }
+
+                val imported = databaseSnapshot.import(file)
+                val totalAfter = databaseSnapshot.localPatientCount()
+                driveRepository.markSnapshotImported(
+                    maxOf(imported.createdAt, row.modifiedAt),
+                    imported.contentHash
+                )
+                progressMonitor.onPatientsRestored(imported.patientCount, totalAfter)
+                DriveLog.i(
+                    TAG,
+                    "Auto-restored ${imported.patientCount} patients (${imported.rowCount} patient rows) from ${key.fileName}"
+                )
+                return true
             }
-            .maxByOrNull { it.modifiedAt } ?: return false
 
-        if (newest.modifiedAt <= watermark) return false
-        val key = runCatching { StorageKey(newest.storageKey) }.getOrNull() ?: return false
-        val file = telegram.materialize(key) ?: return false
-        val summary = databaseSnapshot.inspect(file) ?: return false
-        if (summary.rowCount == 0) return false
-
-        if (summary.contentHash.isNotEmpty() && summary.contentHash == lastHash) {
-            driveRepository.markSnapshotImported(newest.modifiedAt, summary.contentHash)
+            DriveLog.w(TAG, "No snapshot in Drive contained patient rows")
+            progressMonitor.addExplanation(
+                SyncExplanation(ExplanationCode.NO_PATIENT_SNAPSHOT_FOUND, ExplanationSeverity.WARNING)
+            )
             return false
         }
 
-        val imported = databaseSnapshot.import(file)
-        driveRepository.markSnapshotImported(newest.modifiedAt, imported.contentHash)
-        DriveLog.i(TAG, "Merged ${imported.rowCount} rows from newer remote snapshot ${key.fileName}")
-        return true
+        // Normal multi-device sync when local DB already holds patients.
+        val newerCandidates = candidates.filter { it.modifiedAt > watermark }
+        var inspected = 0
+        for (row in newerCandidates) {
+            val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: continue
+            if (inspected++ >= MAX_SNAPSHOT_CANDIDATES) break
+
+            val file = telegram.materialize(key) ?: continue
+            val summary = databaseSnapshot.inspect(file) ?: continue
+            if (summary.patientCount == 0) {
+                DriveLog.d(TAG, "Skipping newer 0-patient snapshot ${key.fileName}")
+                continue
+            }
+
+            if (summary.contentHash.isNotEmpty() && summary.contentHash == lastHash) {
+                driveRepository.markSnapshotImported(row.modifiedAt, summary.contentHash)
+                return false
+            }
+
+            val imported = databaseSnapshot.import(file)
+            val totalAfter = databaseSnapshot.localPatientCount()
+            driveRepository.markSnapshotImported(row.modifiedAt, imported.contentHash)
+            progressMonitor.onPatientsRestored(imported.patientCount, totalAfter)
+            DriveLog.i(
+                TAG,
+                "Merged ${imported.patientCount} patients (${imported.rowCount} patient rows) from newer remote snapshot ${key.fileName}"
+            )
+            return true
+        }
+        return false
     }
 
     /**
-     * Exports the database and uploads it — unless doing so would bury a better
-     * snapshot.
-     *
-     * A fresh install has an empty database. Uploading that produces a snapshot
-     * that is newer than the one holding the user's actual records, and a later
-     * restore picks it and returns nothing. Refusing the push is the only safe
-     * behaviour: an empty local database is never evidence that the records were
-     * deleted, only that this device has not been restored yet.
+     * Exports ONLY patient-domain tables and uploads the snapshot — unless the device
+     * has 0 patients locally while Drive holds snapshots, preventing empty installs from
+     * burying real patient backups.
      */
     private suspend fun pushDatabaseSnapshot(): Boolean {
         val timestamp = System.currentTimeMillis()
         val staging = File(snapshotWorkDir, "ortho-db-$timestamp.json")
         val summary = databaseSnapshot.export(staging)
 
-        if (summary.rowCount == 0 && driveHoldsRecords()) {
+        if (summary.patientCount == 0 && driveHoldsRecords()) {
             staging.delete()
             DriveLog.w(
                 TAG,
-                "Local database is empty but the drive holds records; skipping the " +
-                        "snapshot push so restore keeps seeing the good copy"
+                "Local database has 0 patients while Drive holds snapshots; skipping snapshot push to protect remote backups"
             )
+            progressMonitor.addExplanation(
+                SyncExplanation(
+                    ExplanationCode.EMPTY_PATIENT_OVERWRITE_BLOCKED,
+                    ExplanationSeverity.INFO
+                )
+            )
+            return false
+        }
+
+        if (summary.patientCount == 0 && summary.rowCount == 0) {
+            staging.delete()
+            DriveLog.d(TAG, "No local patient records to snapshot; skipping upload")
             return false
         }
 
@@ -587,11 +708,11 @@ class SyncEngine(
             if (driveRepository.hasUnpushedRecords()) {
                 driveRepository.markSnapshotPushed(newest.modifiedAt, summary.contentHash)
             }
-            DriveLog.d(TAG, "Records unchanged since the last snapshot; nothing to upload")
+            DriveLog.d(TAG, "Patient records unchanged since the last snapshot; nothing to upload")
             return false
         }
 
-        val key = StorageKey.snapshot(timestamp, summary.rowCount)
+        val key = StorageKey.snapshot(timestamp, summary.rowCount, summary.patientCount)
         return try {
             val terminal = telegram.put(
                 key,
@@ -604,6 +725,7 @@ class SyncEngine(
             }
             if (terminal is TransferProgress.Completed) {
                 driveRepository.markSnapshotPushed(summary.createdAt, summary.contentHash)
+                progressMonitor.onPatientsBackedUp(summary.patientCount)
                 true
             } else {
                 false
@@ -613,16 +735,25 @@ class SyncEngine(
         }
     }
 
-    /** True when any snapshot in the drive is known to contain records. */
+    /** True when any snapshot in the drive may contain patient records. */
     private suspend fun driveHoldsRecords(): Boolean =
         remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX).any { row ->
-            val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: return@any false
-            (StorageKey.snapshotRowCount(key) ?: 0) > 0
+            isPotentiallyNonEmptySnapshotKey(row.storageKey)
         }
 
+    private fun isPotentiallyNonEmptySnapshotKey(storageKey: String): Boolean {
+        val key = runCatching { StorageKey(storageKey) }.getOrNull() ?: return false
+        val patientCount = StorageKey.snapshotPatientCount(key)
+        val rowCount = StorageKey.snapshotRowCount(key)
+        // Legacy snapshots lack -p{N} (patientCount == null) and might carry -r1475 from old exports.
+        if (patientCount != null) return patientCount > 0
+        if (rowCount != null) return rowCount > 0
+        return true
+    }
+
     /**
-     * Fetches the newest snapshot from the drive and merges it. Used by the setup
-     * wizard on a fresh install and by the explicit restore action.
+     * Fetches the newest snapshot from the drive that actually contains patients and merges
+     * ONLY the patient tables into the local database.
      */
     suspend fun pullDatabaseSnapshot(): SnapshotSummary? = withContext(Dispatchers.IO) {
         val candidates = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
@@ -630,16 +761,16 @@ class SyncEngine(
 
         if (candidates.isEmpty()) {
             DriveLog.w(TAG, "No snapshot in the drive to restore from")
+            progressMonitor.addExplanation(
+                SyncExplanation(ExplanationCode.NO_PATIENT_SNAPSHOT_FOUND, ExplanationSeverity.WARNING)
+            )
             return@withContext null
         }
 
-        // Newest-first, skipping any whose key says it holds nothing. Keys written
-        // before row counts existed carry no count, so those are still downloaded
-        // and inspected rather than assumed empty.
         var inspected = 0
         for (row in candidates) {
             val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: continue
-            if (StorageKey.snapshotRowCount(key) == 0) continue
+            if (!isPotentiallyNonEmptySnapshotKey(row.storageKey)) continue
             if (inspected++ >= MAX_SNAPSHOT_CANDIDATES) break
 
             val file = telegram.materialize(key)
@@ -648,34 +779,33 @@ class SyncEngine(
                 continue
             }
             val summary = databaseSnapshot.inspect(file)
-            if (summary == null || summary.rowCount == 0) {
-                DriveLog.d(TAG, "Snapshot ${key.fileName} holds no records; trying an older one")
+            if (summary == null || summary.patientCount == 0) {
+                DriveLog.d(TAG, "Snapshot ${key.fileName} holds 0 patients; trying an older one")
                 continue
             }
-            DriveLog.i(TAG, "Restoring ${summary.rowCount} rows from ${key.fileName}")
+            DriveLog.i(TAG, "Restoring ${summary.patientCount} patients (${summary.rowCount} rows) from ${key.fileName}")
             val imported = databaseSnapshot.import(file)
+            val totalAfter = databaseSnapshot.localPatientCount()
             driveRepository.markSnapshotImported(
                 maxOf(imported.createdAt, row.modifiedAt),
                 imported.contentHash
             )
+            progressMonitor.onPatientsRestored(imported.patientCount, totalAfter)
             return@withContext imported
         }
 
         DriveLog.w(
             TAG,
-            "Checked ${candidates.size} snapshots and none contained records. If the " +
-                    "drive was written by another install, its encryption key is not on " +
-                    "this device."
+            "Checked ${candidates.size} snapshots and none contained patient records."
+        )
+        progressMonitor.addExplanation(
+            SyncExplanation(ExplanationCode.NO_PATIENT_SNAPSHOT_FOUND, ExplanationSeverity.WARNING)
         )
         null
     }
 
     // ---- Integrity -----------------------------------------------------------
 
-    /**
-     * Walks the index and checks every entry still resolves. Returns the keys that
-     * failed so the diagnostics screen can list them; nothing is deleted here.
-     */
     suspend fun verifyIntegrity(): IntegrityReport = withContext(Dispatchers.IO) {
         val rows = remoteObjectDao.getAllLive()
         val missing = mutableListOf<String>()
@@ -712,18 +842,13 @@ class SyncEngine(
         CleanupReport(trimmedHistory, trimmedTombstones, freed, purgedLocal, prunedSnapshots)
     }
 
-    /**
-     * Removes snapshots known to hold no records, keeping the newest one as a
-     * marker. Only ever touches empty snapshots, so a real backup can never be
-     * pruned by this.
-     */
     private suspend fun pruneEmptySnapshots(): Int {
         val snapshots = remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX)
             .sortedByDescending { it.modifiedAt }
             .mapNotNull { row ->
                 val key = runCatching { StorageKey(row.storageKey) }.getOrNull()
                     ?: return@mapNotNull null
-                key to StorageKey.snapshotRowCount(key)
+                key to (StorageKey.snapshotPatientCount(key) ?: StorageKey.snapshotRowCount(key))
             }
         val empties = snapshots.filter { it.second == 0 }.drop(1)
         empties.forEach { (key, _) ->
@@ -738,7 +863,7 @@ class SyncEngine(
         private const val TAG = "SyncEngine"
         private const val PAGE_SIZE = 100
         private const val MAX_PAGES = 200
-        private const val MAX_SNAPSHOT_CANDIDATES = 10
+        private const val MAX_SNAPSHOT_CANDIDATES = 25
         private const val REMOTE_DELETION_REASON = "remote deletion"
     }
 }

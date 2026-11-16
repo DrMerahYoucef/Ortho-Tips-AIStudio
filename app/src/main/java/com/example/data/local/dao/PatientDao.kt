@@ -49,6 +49,12 @@ interface PatientDao {
     @Query("SELECT COUNT(*) FROM patients")
     suspend fun getPatientCount(): Int
 
+    @Query("SELECT COUNT(*) FROM patients")
+    fun observePatientCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM patients WHERE isArchived = 0")
+    fun observeActivePatientCount(): Flow<Int>
+
     @Query("SELECT EXISTS(SELECT 1 FROM patients WHERE patientCode = :patientCode AND id != :excludeId)")
     suspend fun isPatientCodeTaken(patientCode: String, excludeId: String = ""): Boolean
 

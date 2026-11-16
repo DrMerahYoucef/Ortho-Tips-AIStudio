@@ -343,6 +343,11 @@ fun PatientListScreen(
                 }
             }
 
+            com.example.ui.components.SyncStatusBanner(
+                onNavigateToSettings = onNavigateToSettings,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+
             when {
                 uiState.isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

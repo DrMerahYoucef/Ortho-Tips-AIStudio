@@ -148,6 +148,8 @@ fun TelegramDriveSettingsScreen(
             ) {
                 item { ConnectionCard(state) }
 
+                item { com.example.ui.components.SyncStatusBanner() }
+
                 item {
                     DriveSection(stringResource(R.string.drive_sec_backup)) {
                         // Not a choice of where data lives any more. Patients and

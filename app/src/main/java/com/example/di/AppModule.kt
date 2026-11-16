@@ -231,8 +231,15 @@ class AppModule(private val context: Context) {
         )
     }
 
+    val syncProgressMonitor: com.example.data.sync.SyncProgressMonitor by lazy {
+        com.example.data.sync.SyncProgressMonitor()
+    }
+
     val databaseSnapshot: DatabaseSnapshot by lazy {
-        DatabaseSnapshot(database) {
+        DatabaseSnapshot(
+            database = database,
+            patientMediaRootDir = context.filesDir
+        ) {
             com.example.widget.OrthoWidgetProvider.refreshAll(context)
         }
     }
@@ -268,7 +275,8 @@ class AppModule(private val context: Context) {
             databaseSnapshot = databaseSnapshot,
             driveRepository = telegramDriveRepository,
             localRootDir = context.filesDir,
-            snapshotWorkDir = snapshotWorkDir
+            snapshotWorkDir = snapshotWorkDir,
+            progressMonitor = syncProgressMonitor
         )
     }
 }

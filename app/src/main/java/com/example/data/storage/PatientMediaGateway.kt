@@ -50,11 +50,15 @@ class PatientMediaGateway(
      */
     fun keyFor(absolutePath: String?): StorageKey? {
         if (absolutePath.isNullOrBlank()) return null
-        val normalised = absolutePath.removePrefix(filesRoot).removePrefix(File.separator)
-        if (normalised == absolutePath && !absolutePath.startsWith(StorageKey.PATIENTS_PREFIX)) {
-            return null
+        val normalizedSlashes = absolutePath.replace(File.separatorChar, '/')
+        val rootPrefix = filesRoot.replace(File.separatorChar, '/').trimEnd('/') + "/"
+        val relative = when {
+            normalizedSlashes.startsWith(StorageKey.PATIENTS_PREFIX) -> normalizedSlashes
+            normalizedSlashes.startsWith(rootPrefix) -> normalizedSlashes.removePrefix(rootPrefix)
+            normalizedSlashes.contains("/files/${StorageKey.PATIENTS_PREFIX}") ->
+                StorageKey.PATIENTS_PREFIX + normalizedSlashes.substringAfter("/files/${StorageKey.PATIENTS_PREFIX}")
+            else -> return null
         }
-        val relative = normalised.replace(File.separatorChar, '/')
         if (!relative.startsWith(StorageKey.PATIENTS_PREFIX)) return null
         return runCatching { StorageKey(relative) }.getOrNull()
     }
@@ -234,7 +238,11 @@ class PatientMediaGateway(
         if (!isDriveActive()) return false
         return remoteObjectDao.getByPrefix(StorageKey.SNAPSHOT_PREFIX).any { row ->
             val key = runCatching { StorageKey(row.storageKey) }.getOrNull() ?: return@any false
-            (StorageKey.snapshotRowCount(key) ?: 0) > 0 && row.modifiedAt >= modifiedAt
+            val patientCount = StorageKey.snapshotPatientCount(key)
+            val rowCount = StorageKey.snapshotRowCount(key)
+            (patientCount == null || patientCount > 0) &&
+                (rowCount == null || rowCount > 0) &&
+                row.modifiedAt >= modifiedAt
         }
     }
 
