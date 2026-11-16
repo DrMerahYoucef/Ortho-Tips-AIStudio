@@ -83,108 +83,124 @@ class TransferQueueWorker(
         DriveLog.i(TAG, "Transfer worker started (attempt ${runAttemptCount + 1})")
         var processed = 0
         var failures = 0
+        var batchActive = false
 
-        while (processed < BATCH_LIMIT) {
-            val batch = queueDao.claimBatch(System.currentTimeMillis(), 1)
-            val row = batch.firstOrNull() ?: break
-            queueDao.update(
-                row.copy(state = TransferState.RUNNING.name, updatedAt = System.currentTimeMillis())
-            )
+        try {
+            while (processed < BATCH_LIMIT) {
+                val batch = queueDao.claimBatch(System.currentTimeMillis(), 1)
+                val row = batch.firstOrNull() ?: break
+                if (!batchActive) {
+                    batchActive = true
+                    module.syncProgressMonitor.onTransferBatchStarted()
+                }
+                queueDao.update(
+                    row.copy(state = TransferState.RUNNING.name, updatedAt = System.currentTimeMillis())
+                )
 
-            val key = runCatching { StorageKey(row.storageKey) }.getOrNull()
-            if (key == null) {
-                queueDao.update(row.fail("Malformed storage key"))
-                processed++
-                failures++
-                continue
-            }
-
-            val kind = runCatching { StorageObjectKind.valueOf(row.kind) }
-                .getOrDefault(StorageObjectKind.OTHER)
-            val file = File(row.localPath)
-            val direction = runCatching { TransferDirection.valueOf(row.direction) }
-                .getOrDefault(TransferDirection.UPLOAD)
-
-            val flow = when (direction) {
-                TransferDirection.UPLOAD -> {
-                    if (!file.exists()) {
-                        // The source is gone: the record was deleted after queueing.
-                        queueDao.delete(row.id)
-                        processed++
-                        continue
-                    }
-                    telegram.put(key, file, kind, row.mimeType)
+                val key = runCatching { StorageKey(row.storageKey) }.getOrNull()
+                if (key == null) {
+                    queueDao.update(row.fail("Malformed storage key"))
+                    processed++
+                    failures++
+                    continue
                 }
 
-                TransferDirection.DOWNLOAD -> telegram.get(key, file)
-            }
+                val kind = runCatching { StorageObjectKind.valueOf(row.kind) }
+                    .getOrDefault(StorageObjectKind.OTHER)
+                val file = File(row.localPath)
+                val direction = runCatching { TransferDirection.valueOf(row.direction) }
+                    .getOrDefault(TransferDirection.UPLOAD)
 
-            var terminal: TransferProgress? = null
-            try {
-                flow.collect { progress ->
-                    when (progress) {
-                        is TransferProgress.Running -> setProgress(
-                            workDataOf(
-                                PROGRESS_KEY to row.storageKey,
-                                PROGRESS_FRACTION to progress.fraction
-                            )
-                        )
-
-                        is TransferProgress.Completed, is TransferProgress.Failed -> terminal = progress
-                        else -> Unit
+                val flow = when (direction) {
+                    TransferDirection.UPLOAD -> {
+                        if (!file.exists()) {
+                            // The source is gone: the record was deleted after queueing.
+                            queueDao.delete(row.id)
+                            processed++
+                            continue
+                        }
+                        telegram.put(key, file, kind, row.mimeType)
                     }
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                // A throw inside the transfer (drive not initialised, network
-                // drop, TDLib error) used to crash the whole worker and leave the
-                // row RUNNING. Treat it as a retryable failure of this row only.
-                DriveLog.w(TAG, "Transfer of ${key.fileName} threw", error)
-                terminal = TransferProgress.Failed(error.message ?: "Transfer error", retryable = true)
-            }
 
-            when (val outcome = terminal) {
-                is TransferProgress.Completed -> {
-                    queueDao.update(
-                        row.copy(
-                            state = TransferState.SUCCEEDED.name,
-                            bytesTransferred = outcome.obj.sizeBytes,
-                            totalBytes = outcome.obj.sizeBytes,
-                            lastError = null,
-                            updatedAt = System.currentTimeMillis()
-                        )
-                    )
-                    // A download lands in the local tree with the remote modifiedAt timestamp,
-                    // so the next incremental sync recognises both sides already match.
-                    if (direction == TransferDirection.DOWNLOAD) {
-                        if (outcome.obj.modifiedAt > 0) file.setLastModified(outcome.obj.modifiedAt)
-                        DriveLog.d(TAG, "Fetched ${key.fileName} into local storage")
-                    } else if (
-                        driveSettings.cachePolicy == CachePolicy.MINIMAL &&
-                        !kind.isThumbnail &&
-                        key.value.startsWith(StorageKey.PATIENTS_PREFIX) &&
-                        !file.name.endsWith(".original.jpg") &&
-                        module.patientMediaGateway.isBackedUp(file.absolutePath)
-                    ) {
-                        if (file.delete()) {
-                            DriveLog.d(TAG, "Offloaded ${key.fileName} under MINIMAL cache policy")
+                    TransferDirection.DOWNLOAD -> telegram.get(key, file)
+                }
+
+                var terminal: TransferProgress? = null
+                try {
+                    flow.collect { progress ->
+                        when (progress) {
+                            is TransferProgress.Running -> {
+                                module.syncProgressMonitor.onTransferItemProgress(
+                                    row.storageKey,
+                                    progress.fraction
+                                )
+                                setProgress(
+                                    workDataOf(
+                                        PROGRESS_KEY to row.storageKey,
+                                        PROGRESS_FRACTION to progress.fraction
+                                    )
+                                )
+                            }
+
+                            is TransferProgress.Completed, is TransferProgress.Failed -> terminal = progress
+                            else -> Unit
                         }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    // A throw inside the transfer (drive not initialised, network
+                    // drop, TDLib error) used to crash the whole worker and leave the
+                    // row RUNNING. Treat it as a retryable failure of this row only.
+                    DriveLog.w(TAG, "Transfer of ${key.fileName} threw", error)
+                    terminal = TransferProgress.Failed(error.message ?: "Transfer error", retryable = true)
                 }
 
-                is TransferProgress.Failed -> {
-                    failures++
-                    if (outcome.retryable && row.attemptCount + 1 < MAX_ATTEMPTS) {
-                        queueDao.update(row.backOff(outcome.reason))
-                    } else {
-                        queueDao.update(row.fail(outcome.reason))
+                when (val outcome = terminal) {
+                    is TransferProgress.Completed -> {
+                        queueDao.update(
+                            row.copy(
+                                state = TransferState.SUCCEEDED.name,
+                                bytesTransferred = outcome.obj.sizeBytes,
+                                totalBytes = outcome.obj.sizeBytes,
+                                lastError = null,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                        // A download lands in the local tree with the remote modifiedAt timestamp,
+                        // so the next incremental sync recognises both sides already match.
+                        if (direction == TransferDirection.DOWNLOAD) {
+                            if (outcome.obj.modifiedAt > 0) file.setLastModified(outcome.obj.modifiedAt)
+                            DriveLog.d(TAG, "Fetched ${key.fileName} into local storage")
+                        } else if (
+                            driveSettings.cachePolicy == CachePolicy.MINIMAL &&
+                            !kind.isThumbnail &&
+                            key.value.startsWith(StorageKey.PATIENTS_PREFIX) &&
+                            !file.name.endsWith(".original.jpg") &&
+                            module.patientMediaGateway.isBackedUp(file.absolutePath)
+                        ) {
+                            if (file.delete()) {
+                                DriveLog.d(TAG, "Offloaded ${key.fileName} under MINIMAL cache policy")
+                            }
+                        }
                     }
-                }
 
-                else -> queueDao.update(row.backOff("Transfer produced no result"))
+                    is TransferProgress.Failed -> {
+                        failures++
+                        if (outcome.retryable && row.attemptCount + 1 < MAX_ATTEMPTS) {
+                            queueDao.update(row.backOff(outcome.reason))
+                        } else {
+                            queueDao.update(row.fail(outcome.reason))
+                        }
+                    }
+
+                    else -> queueDao.update(row.backOff("Transfer produced no result"))
+                }
+                processed++
             }
-            processed++
+        } finally {
+            val nextDueAt = runCatching { queueDao.nextPendingAt() }.getOrNull() ?: 0L
+            module.syncProgressMonitor.onTransferBatchFinished(nextDueAt)
         }
 
         if (processed > 0) DriveLog.i(TAG, "Transfer batch: $processed handled, $failures failed")
@@ -296,8 +312,14 @@ class SyncWorker(
         // counted in uploadsQueued (they are already active), and a sync with an
         // error — e.g. one unreadable object in the channel — used to skip the
         // kick entirely, stranding every pending upload.
+        val ignoreConstraints = inputData.getBoolean(INPUT_IGNORE_CONSTRAINTS, false)
+        if (ignoreConstraints) {
+            module.database.transferQueueDao().resetPendingBackoff(System.currentTimeMillis())
+        }
         SyncScheduler(applicationContext).kickTransfers(
-            settings.syncOnWifiOnly, settings.syncWhileChargingOnly
+            wifiOnly = settings.syncOnWifiOnly,
+            chargingOnly = settings.syncWhileChargingOnly,
+            ignoreConstraints = ignoreConstraints
         )
 
         if (!report.succeeded) {
@@ -314,6 +336,7 @@ class SyncWorker(
         const val UNIQUE_PERIODIC = "ortho_drive_periodic_sync"
         const val UNIQUE_ONE_SHOT = "ortho_drive_sync_now"
         const val INPUT_FULL = "full_sync"
+        const val INPUT_IGNORE_CONSTRAINTS = "ignore_constraints"
         private const val READY_WAIT_MILLIS = 90_000L
         private const val CLEANUP_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000
     }
@@ -367,7 +390,12 @@ class SyncScheduler(private val context: Context) {
             .setConstraints(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )
-            .setInputData(workDataOf(SyncWorker.INPUT_FULL to full))
+            .setInputData(
+                workDataOf(
+                    SyncWorker.INPUT_FULL to full,
+                    SyncWorker.INPUT_IGNORE_CONSTRAINTS to true
+                )
+            )
             .build()
         workManager.enqueueUniqueWork(
             SyncWorker.UNIQUE_ONE_SHOT,
@@ -406,13 +434,18 @@ class SyncScheduler(private val context: Context) {
      * worker that is actually running is left alone, with a fresh run chained
      * after it so rows queued meanwhile are not missed.
      */
-    suspend fun kickTransfers(wifiOnly: Boolean = false, chargingOnly: Boolean = false) {
+    suspend fun kickTransfers(
+        wifiOnly: Boolean = false,
+        chargingOnly: Boolean = false,
+        ignoreConstraints: Boolean = false
+    ) {
         val running = runCatching {
             workManager.getWorkInfosForUniqueWork(TransferQueueWorker.UNIQUE_NAME).await()
         }.getOrDefault(emptyList()).any { it.state == WorkInfo.State.RUNNING }
 
+        val effectiveConstraints = buildTransferConstraints(wifiOnly, chargingOnly, ignoreConstraints)
         val request = OneTimeWorkRequestBuilder<TransferQueueWorker>()
-            .setConstraints(constraints(wifiOnly, chargingOnly))
+            .setConstraints(effectiveConstraints)
             .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
             .build()
         workManager.enqueueUniqueWork(
@@ -420,10 +453,12 @@ class SyncScheduler(private val context: Context) {
             if (running) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE,
             request
         )
+        val effectiveWifi = !ignoreConstraints && wifiOnly
+        val effectiveCharging = !ignoreConstraints && chargingOnly
         DriveLog.d(
             TAG,
             "Transfers kicked (" + (if (running) "after the running pass" else "starting now") +
-                    ", wifiOnly=$wifiOnly, chargingOnly=$chargingOnly)"
+                    ", wifiOnly=$effectiveWifi, chargingOnly=$effectiveCharging, forced=$ignoreConstraints)"
         )
     }
 
@@ -465,13 +500,7 @@ class SyncScheduler(private val context: Context) {
     }
 
     private fun constraints(wifiOnly: Boolean, chargingOnly: Boolean): Constraints =
-        Constraints.Builder()
-            .setRequiredNetworkType(if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
-            .setRequiresCharging(chargingOnly)
-            // No "storage not low" constraint: on a phone Android considers low
-            // on space it held every upload back forever, without a single log
-            // line. A genuinely full disk now fails the transfer visibly instead.
-            .build()
+        buildTransferConstraints(wifiOnly, chargingOnly, ignoreConstraints = false)
 
     companion object {
         private const val TAG = "SyncScheduler"
@@ -480,5 +509,21 @@ class SyncScheduler(private val context: Context) {
         private const val MIN_INTERVAL_HOURS = 1L
         private const val UNIQUE_RECORD_SNAPSHOT = "ortho_drive_record_snapshot"
         private const val RECORD_DEBOUNCE_SECONDS = 20L
+
+        internal fun buildTransferConstraints(
+            wifiOnly: Boolean,
+            chargingOnly: Boolean,
+            ignoreConstraints: Boolean = false
+        ): Constraints {
+            val requireWifi = !ignoreConstraints && wifiOnly
+            val requireCharging = !ignoreConstraints && chargingOnly
+            return Constraints.Builder()
+                .setRequiredNetworkType(if (requireWifi) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                .setRequiresCharging(requireCharging)
+                // No "storage not low" constraint: on a phone Android considers low
+                // on space it held every upload back forever, without a single log
+                // line. A genuinely full disk now fails the transfer visibly instead.
+                .build()
+        }
     }
 }

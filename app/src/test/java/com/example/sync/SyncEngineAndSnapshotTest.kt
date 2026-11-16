@@ -866,6 +866,115 @@ class SyncEngineAndSnapshotTest {
         assertTrue(dump.contains("18:40:59 I/SyncEngine: Sync full done"))
     }
 
+    @Test
+    fun `default wifi policy allows mobile data and ignoreConstraints overrides background limits`() {
+        val defaults = com.example.data.prefs.TelegramDriveSettings()
+        assertFalse("syncOnWifiOnly should default to false so 5G transfers run automatically", defaults.syncOnWifiOnly)
+
+        val constrained = com.example.work.SyncScheduler.buildTransferConstraints(
+            wifiOnly = true,
+            chargingOnly = true,
+            ignoreConstraints = false
+        )
+        assertEquals(androidx.work.NetworkType.UNMETERED, constrained.requiredNetworkType)
+        assertTrue(constrained.requiresCharging())
+
+        val immediate = com.example.work.SyncScheduler.buildTransferConstraints(
+            wifiOnly = true,
+            chargingOnly = true,
+            ignoreConstraints = true
+        )
+        assertEquals(androidx.work.NetworkType.CONNECTED, immediate.requiredNetworkType)
+        assertFalse(immediate.requiresCharging())
+    }
+
+    @Test
+    fun `monitor transfer batch lifecycle and queue pause explanations diagnose wait reasons cleanly`() {
+        val monitor = com.example.data.sync.SyncProgressMonitor()
+        assertFalse(monitor.status.value.isTransferring)
+
+        monitor.onTransferBatchStarted()
+        assertTrue(monitor.status.value.isTransferring)
+
+        monitor.onTransferItemProgress("patients/p1/images/x.jpg", 0.45f)
+        assertEquals("patients/p1/images/x.jpg", monitor.status.value.currentTransferKey)
+        assertEquals(0.45f, monitor.status.value.currentTransferFraction, 0.001f)
+
+        monitor.onTransferBatchFinished(nextRetryAt = 123_456L)
+        assertFalse(monitor.status.value.isTransferring)
+        assertEquals(null, monitor.status.value.currentTransferKey)
+        assertEquals(123_456L, monitor.status.value.nextRetryAt)
+
+        val wifiSettings = com.example.data.prefs.TelegramDriveSettings(syncOnWifiOnly = true)
+        val cellularEnv = com.example.ui.components.QueueEnvironment(
+            hasInternet = true,
+            hasUnmeteredWifi = false,
+            isCharging = false,
+            telegramReady = true
+        )
+        val wifiPaused = com.example.ui.components.detectQueuePauseExplanation(
+            settings = wifiSettings,
+            pendingCount = 4,
+            activeTransfers = emptyList(),
+            environment = cellularEnv,
+            nowMillis = 1_000L
+        )
+        assertEquals(com.example.data.sync.ExplanationCode.TRANSFERS_WAITING_WIFI, wifiPaused?.code)
+
+        val chargingPaused = com.example.ui.components.detectQueuePauseExplanation(
+            settings = com.example.data.prefs.TelegramDriveSettings(syncOnWifiOnly = false, syncWhileChargingOnly = true),
+            pendingCount = 2,
+            activeTransfers = emptyList(),
+            environment = cellularEnv,
+            nowMillis = 1_000L
+        )
+        assertEquals(com.example.data.sync.ExplanationCode.TRANSFERS_WAITING_CHARGING, chargingPaused?.code)
+
+        val offlinePaused = com.example.ui.components.detectQueuePauseExplanation(
+            settings = com.example.data.prefs.TelegramDriveSettings(),
+            pendingCount = 2,
+            activeTransfers = emptyList(),
+            environment = cellularEnv.copy(hasInternet = false),
+            nowMillis = 1_000L
+        )
+        assertEquals(com.example.data.sync.ExplanationCode.TRANSFERS_OFFLINE, offlinePaused?.code)
+
+        val sessionPaused = com.example.ui.components.detectQueuePauseExplanation(
+            settings = com.example.data.prefs.TelegramDriveSettings(),
+            pendingCount = 2,
+            activeTransfers = emptyList(),
+            environment = cellularEnv.copy(telegramReady = false),
+            nowMillis = 1_000L
+        )
+        assertEquals(com.example.data.sync.ExplanationCode.TRANSFERS_SESSION_CONNECTING, sessionPaused?.code)
+
+        val backoffRow = com.example.data.local.entity.TransferQueueEntity(
+            storageKey = "patients/p1/images/x.jpg",
+            direction = com.example.data.local.entity.TransferDirection.UPLOAD.name,
+            localPath = "/tmp/x.jpg",
+            kind = com.example.data.storage.StorageObjectKind.PATIENT_IMAGE.name,
+            mimeType = "image/jpeg",
+            state = com.example.data.local.entity.TransferState.PENDING.name,
+            nextAttemptAt = 46_000L,
+            lastError = "FLOOD_WAIT_30"
+        )
+        val backoffPaused = com.example.ui.components.buildResolvedExplanations(
+            live = com.example.data.sync.SyncLiveStatus(),
+            failedTransfers = 0,
+            lastSyncError = "",
+            settings = com.example.data.prefs.TelegramDriveSettings(),
+            pendingCount = 1,
+            isQueuePaused = true,
+            activeTransfers = listOf(backoffRow),
+            environment = cellularEnv,
+            nowMillis = 1_000L
+        )
+        val exp = backoffPaused.firstOrNull { it.code == com.example.data.sync.ExplanationCode.TRANSFERS_RETRY_BACKOFF }
+        assertNotNull(exp)
+        assertTrue(exp!!.detail!!.contains("45s"))
+        assertTrue(exp.detail!!.contains("FLOOD_WAIT_30"))
+    }
+
     private class FakeTelegramClient(private val root: File) : TelegramClient {
         private val _authState = MutableStateFlow<TelegramAuthState>(TelegramAuthState.Ready)
         override val authState: StateFlow<TelegramAuthState> = _authState.asStateFlow()

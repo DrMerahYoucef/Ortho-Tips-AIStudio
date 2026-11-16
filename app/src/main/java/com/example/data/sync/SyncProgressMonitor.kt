@@ -37,6 +37,12 @@ enum class ExplanationCode {
     SNAPSHOT_RESTORE_FAILED,
     SNAPSHOT_PUSH_FAILED,
     TRANSFER_FAILURES,
+    TRANSFERS_WAITING_WIFI,
+    TRANSFERS_WAITING_CHARGING,
+    TRANSFERS_OFFLINE,
+    TRANSFERS_SESSION_CONNECTING,
+    TRANSFERS_RETRY_BACKOFF,
+    TRANSFERS_PAUSED_QUEUE,
     GENERIC_ERROR
 }
 
@@ -48,6 +54,10 @@ data class SyncExplanation(
 
 data class SyncLiveStatus(
     val isSyncing: Boolean = false,
+    val isTransferring: Boolean = false,
+    val currentTransferKey: String? = null,
+    val currentTransferFraction: Float = 0f,
+    val nextRetryAt: Long = 0L,
     val phase: SyncPhase = SyncPhase.IDLE,
     val scope: SyncScope? = null,
     val startedAt: Long = 0L,
@@ -78,15 +88,53 @@ class SyncProgressMonitor {
     val status: StateFlow<SyncLiveStatus> = _status.asStateFlow()
 
     fun onSyncStarted(scope: SyncScope, localPatientCount: Int) {
-        _status.value = SyncLiveStatus(
-            isSyncing = true,
-            phase = SyncPhase.CONNECTING,
-            scope = scope,
-            startedAt = System.currentTimeMillis(),
-            localPatientCount = localPatientCount,
-            dismissed = false,
-            hasRunSinceLaunch = true
-        )
+        _status.update { current ->
+            SyncLiveStatus(
+                isSyncing = true,
+                isTransferring = current.isTransferring,
+                currentTransferKey = current.currentTransferKey,
+                currentTransferFraction = current.currentTransferFraction,
+                phase = SyncPhase.CONNECTING,
+                scope = scope,
+                startedAt = System.currentTimeMillis(),
+                localPatientCount = localPatientCount,
+                dismissed = false,
+                hasRunSinceLaunch = true
+            )
+        }
+    }
+
+    fun onTransferBatchStarted() {
+        _status.update { current ->
+            current.copy(
+                isTransferring = true,
+                currentTransferKey = null,
+                currentTransferFraction = 0f,
+                nextRetryAt = 0L,
+                hasRunSinceLaunch = true
+            )
+        }
+    }
+
+    fun onTransferItemProgress(storageKey: String, fraction: Float) {
+        _status.update { current ->
+            current.copy(
+                isTransferring = true,
+                currentTransferKey = storageKey,
+                currentTransferFraction = fraction.coerceIn(0f, 1f)
+            )
+        }
+    }
+
+    fun onTransferBatchFinished(nextRetryAt: Long = 0L) {
+        _status.update { current ->
+            current.copy(
+                isTransferring = false,
+                currentTransferKey = null,
+                currentTransferFraction = 0f,
+                nextRetryAt = nextRetryAt
+            )
+        }
     }
 
     fun updatePhase(phase: SyncPhase) {

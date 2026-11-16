@@ -116,6 +116,13 @@ interface TransferQueueDao {
     )
     suspend fun retryAllFailed(now: Long)
 
+    /** Clears scheduled backoff delays on pending transfers so a manual kick runs immediately. */
+    @Query(
+        "UPDATE transfer_queue SET nextAttemptAt = 0, updatedAt = :now " +
+                "WHERE state = 'PENDING' AND nextAttemptAt > :now"
+    )
+    suspend fun resetPendingBackoff(now: Long = System.currentTimeMillis())
+
     /** Recovers rows left RUNNING by a process death so they are picked up again. */
     @Query(
         "UPDATE transfer_queue SET state = 'PENDING', updatedAt = :now " +

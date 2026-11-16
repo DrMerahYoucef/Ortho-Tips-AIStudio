@@ -902,6 +902,7 @@
     <string name="sync_phase_planning">Planification des médias patients…</string>
     <string name="sync_phase_backing_up">Sauvegarde des dossiers patients…</string>
     <string name="sync_phase_transferring">Transfert des médias patients…</string>
+    <string name="sync_phase_paused">Transferts médias en pause</string>
     <string name="sync_phase_completed">Synchronisation patients terminée</string>
     <string name="sync_phase_warning">Synchronisation terminée avec alertes</string>
     <string name="sync_phase_failed">Erreur de synchronisation</string>
@@ -926,6 +927,7 @@
     <string name="sync_banner_copy_logs">Copier les logs</string>
     <string name="sync_banner_logs_copied">Copié</string>
     <string name="sync_banner_sync_now">Synchroniser</string>
+    <string name="sync_banner_transfer_now">Transférer</string>
     <string name="sync_banner_retry_failed">Relancer échecs</string>
     <string name="sync_banner_open_settings">Réglages</string>
     <string name="sync_banner_duration_manifest">Dernière passe : %1$d ms · %2$d entrées Drive</string>
@@ -943,6 +945,18 @@
     <string name="sync_exp_not_selected_body">Le stockage actif est local. Activez Telegram Drive dans les réglages pour synchroniser les patients.</string>
     <string name="sync_exp_transfer_failed_title">Erreurs de transfert média (%1$d)</string>
     <string name="sync_exp_transfer_failed_body">%1$d envois ou téléchargements de photos/documents ont échoué%2$s. Appuyez sur Relancer échecs dès que le réseau est stable.</string>
+    <string name="sync_exp_waiting_wifi_title">En attente du Wi-Fi</string>
+    <string name="sync_exp_waiting_wifi_body">L’option « Wi-Fi uniquement » est activée alors que l’appareil est sur les données mobiles. Appuyez sur Transférer pour lancer immédiatement, ou désactivez Wi-Fi uniquement.</string>
+    <string name="sync_exp_waiting_charging_title">En attente de charge</string>
+    <string name="sync_exp_waiting_charging_body">La synchronisation en charge uniquement est activée dans les réglages. Branchez l’appareil ou appuyez sur Transférer pour lancer tout de suite.</string>
+    <string name="sync_exp_offline_title">En attente de connexion internet</string>
+    <string name="sync_exp_offline_body">Les transferts médias reprendront automatiquement dès le retour de la connexion réseau.</string>
+    <string name="sync_exp_session_starting_title">Connexion à la session Telegram…</string>
+    <string name="sync_exp_session_starting_body">Les dossiers patients sont prêts localement. Les médias démarreront dès que Telegram aura rétabli la session, ou appuyez sur Transférer.</string>
+    <string name="sync_exp_retry_backoff_title">Nouvelle tentative planifiée (%1$s)</string>
+    <string name="sync_exp_retry_backoff_body">En pause temporaire avant la prochaine tentative%1$s. Appuyez sur Transférer pour relancer immédiatement.</string>
+    <string name="sync_exp_paused_queue_title">Médias en file d’attente</string>
+    <string name="sync_exp_paused_queue_body">%1$s transferts médias sont en file et prêts à démarrer. Appuyez sur Transférer pour les lancer tout de suite.</string>
     <string name="sync_exp_step_failed_title">Échec d’une étape de synchronisation</string>
     <string name="sync_exp_step_failed_body">Détail : %1$s. Copiez les logs ci-dessous pour analyser la séquence complète des événements.</string>
 </resources>

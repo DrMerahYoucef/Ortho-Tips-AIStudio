@@ -393,7 +393,7 @@ class TelegramSetupViewModel(
         }
         val report = appModule.syncEngine.sync(SyncScope.FULL, ConflictPolicy.NEWEST_WINS)
         _uiState.value = _uiState.value.copy(initialSyncReport = report)
-        SyncScheduler(applicationContext).kickTransfers()
+        SyncScheduler(applicationContext).kickTransfers(ignoreConstraints = true)
         return true
     }
 
@@ -633,7 +633,11 @@ class TelegramDriveSettingsViewModel(
                             keyFingerprint = appModule.wrappedKeyRepository.fingerprint(CryptoKeys.CONTENT)
                         )
                         val settings = drive.current()
-                        scheduler.kickTransfers(settings.syncOnWifiOnly, settings.syncWhileChargingOnly)
+                        scheduler.kickTransfers(
+                            wifiOnly = settings.syncOnWifiOnly,
+                            chargingOnly = settings.syncWhileChargingOnly,
+                            ignoreConstraints = true
+                        )
                         PassphraseOutcome.UNLOCKED
                     }
                 }
@@ -731,8 +735,13 @@ class TelegramDriveSettingsViewModel(
         _uiState.value = _uiState.value.copy(lastReport = report)
         // Always kick: rows already waiting are not counted as "queued" by the
         // sync, so this button used to leave them pending.
+        queueDao.resetPendingBackoff(System.currentTimeMillis())
         val settings = drive.current()
-        scheduler.kickTransfers(settings.syncOnWifiOnly, settings.syncWhileChargingOnly)
+        scheduler.kickTransfers(
+            wifiOnly = settings.syncOnWifiOnly,
+            chargingOnly = settings.syncWhileChargingOnly,
+            ignoreConstraints = true
+        )
         message(
             if (report.succeeded) {
                 text(R.string.drive_msg_queued_both, report.uploadsQueued, report.downloadsQueued)
@@ -743,9 +752,15 @@ class TelegramDriveSettingsViewModel(
     }
 
     fun retryFailedTransfers() = launchWith(text(R.string.drive_busy_retry)) {
-        queueDao.retryAllFailed(System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        queueDao.retryAllFailed(now)
+        queueDao.resetPendingBackoff(now)
         val settings = drive.current()
-        scheduler.kickTransfers(settings.syncOnWifiOnly, settings.syncWhileChargingOnly)
+        scheduler.kickTransfers(
+            wifiOnly = settings.syncOnWifiOnly,
+            chargingOnly = settings.syncWhileChargingOnly,
+            ignoreConstraints = true
+        )
         message(text(R.string.drive_msg_requeued))
     }
 
@@ -794,7 +809,11 @@ class TelegramDriveSettingsViewModel(
         val report = appModule.syncEngine.sync(SyncScope.FULL, ConflictPolicy.PREFER_LOCAL)
         _uiState.value = _uiState.value.copy(lastReport = report)
         val settings = drive.current()
-        scheduler.kickTransfers(settings.syncOnWifiOnly, settings.syncWhileChargingOnly)
+        scheduler.kickTransfers(
+            wifiOnly = settings.syncOnWifiOnly,
+            chargingOnly = settings.syncWhileChargingOnly,
+            ignoreConstraints = true
+        )
         message(text(R.string.drive_msg_queued_uploads, report.uploadsQueued))
     }
 
@@ -805,7 +824,11 @@ class TelegramDriveSettingsViewModel(
         val report = appModule.syncEngine.sync(SyncScope.FULL, ConflictPolicy.PREFER_REMOTE)
         _uiState.value = _uiState.value.copy(lastReport = report)
         val settings = drive.current()
-        scheduler.kickTransfers(settings.syncOnWifiOnly, settings.syncWhileChargingOnly)
+        scheduler.kickTransfers(
+            wifiOnly = settings.syncOnWifiOnly,
+            chargingOnly = settings.syncWhileChargingOnly,
+            ignoreConstraints = true
+        )
         message(
             if (restored == null) {
                 text(R.string.drive_msg_no_records, report.downloadsQueued)

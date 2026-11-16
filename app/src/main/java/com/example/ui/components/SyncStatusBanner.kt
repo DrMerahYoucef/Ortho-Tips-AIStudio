@@ -1,6 +1,13 @@
 package com.example.ui.components
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.BatteryManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -35,8 +42,10 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PauseCircleOutline
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PermMedia
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
@@ -56,9 +65,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -74,6 +85,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.example.OrthoApplication
 import com.example.R
 import com.example.data.local.entity.TransferDirection
@@ -88,8 +101,10 @@ import com.example.data.sync.SyncLiveStatus
 import com.example.data.sync.SyncPhase
 import com.example.data.sync.SyncScope
 import com.example.data.telegram.DriveLog
+import com.example.data.telegram.TelegramAuthState
 import com.example.utils.MediaActions
 import com.example.work.SyncScheduler
+import com.example.work.TransferQueueWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -128,12 +143,28 @@ fun SyncStatusBanner(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val remoteObjectsCount by appModule.database.remoteObjectDao().observeLiveCount()
         .collectAsStateWithLifecycle(initialValue = 0)
+    val authState by appModule.telegramClient.authState.collectAsStateWithLifecycle()
     val logs by DriveLog.entries.collectAsStateWithLifecycle()
 
-    val hasQueueWork = pendingUploads > 0 || pendingDownloads > 0 ||
-        activeTransfers.any { it.state == TransferState.RUNNING.name }
-    val hasActiveWork = live.isSyncing || hasQueueWork
-    val hasPersistentIssue = failedTransfers > 0 || driveSettings.lastSyncError.isNotBlank()
+    val transferWorkInfos by produceState<List<WorkInfo>>(initialValue = emptyList(), context) {
+        runCatching {
+            WorkManager.getInstance(context.applicationContext)
+                .getWorkInfosForUniqueWorkFlow(TransferQueueWorker.UNIQUE_NAME)
+                .collect { value = it }
+        }
+    }
+    val queueEnvironment = rememberQueueEnvironment(
+        context = context,
+        telegramReady = authState == TelegramAuthState.Ready
+    )
+
+    val hasPendingQueue = pendingUploads > 0 || pendingDownloads > 0
+    val isWorkerRunning = transferWorkInfos.any { it.state == WorkInfo.State.RUNNING }
+    val hasRunningRow = activeTransfers.any { it.state == TransferState.RUNNING.name }
+    val isActivelyTransferring = live.isTransferring || isWorkerRunning || hasRunningRow
+    val hasActiveWork = live.isSyncing || isActivelyTransferring
+    val isQueuePaused = hasPendingQueue && !hasActiveWork
+    val hasPersistentIssue = failedTransfers > 0 || driveSettings.lastSyncError.isNotBlank() || isQueuePaused
     val shouldShow = (driveSettings.setupCompleted || live.isSyncing || live.hasRunSinceLaunch) &&
         (hasActiveWork || ((live.hasRunSinceLaunch || hasPersistentIssue) && !live.dismissed))
 
@@ -150,15 +181,36 @@ fun SyncStatusBanner(
         }
     }
 
-    val resolvedExplanations = remember(live, failedTransfers, driveSettings.lastSyncError) {
-        buildResolvedExplanations(live, failedTransfers, driveSettings.lastSyncError)
+    val resolvedExplanations = remember(
+        live,
+        failedTransfers,
+        driveSettings.lastSyncError,
+        driveSettings.syncOnWifiOnly,
+        driveSettings.syncWhileChargingOnly,
+        isQueuePaused,
+        pendingUploads,
+        pendingDownloads,
+        activeTransfers,
+        queueEnvironment
+    ) {
+        buildResolvedExplanations(
+            live = live,
+            failedTransfers = failedTransfers,
+            lastSyncError = driveSettings.lastSyncError,
+            settings = driveSettings,
+            pendingCount = pendingUploads + pendingDownloads,
+            isQueuePaused = isQueuePaused,
+            activeTransfers = activeTransfers,
+            environment = queueEnvironment
+        )
     }
 
     val hasError = live.phase == SyncPhase.FAILED ||
         live.errors.isNotEmpty() ||
         failedTransfers > 0 ||
         driveSettings.lastSyncError.isNotBlank()
-    val hasWarning = !hasError && resolvedExplanations.any { it.severity == ExplanationSeverity.WARNING }
+    val hasWarning = !hasError &&
+        (isQueuePaused || resolvedExplanations.any { it.severity == ExplanationSeverity.WARNING })
 
     val containerColor = when {
         hasActiveWork -> MaterialTheme.colorScheme.secondaryContainer
@@ -173,7 +225,13 @@ fun SyncStatusBanner(
         else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
 
-    val phaseTitle = syncPhaseTitle(live.phase, hasQueueWork, hasError, hasWarning)
+    val phaseTitle = syncPhaseTitle(
+        phase = live.phase,
+        isActivelyTransferring = isActivelyTransferring,
+        isQueuePaused = isQueuePaused,
+        hasError = hasError,
+        hasWarning = hasWarning
+    )
     val mediaSummary = buildString {
         append(stringResource(R.string.sync_banner_media_summary, pendingUploads, pendingDownloads))
         if (failedTransfers > 0) {
@@ -213,6 +271,7 @@ fun SyncStatusBanner(
                     Icon(
                         imageVector = when {
                             hasError -> Icons.Default.ErrorOutline
+                            isQueuePaused -> Icons.Default.PauseCircleOutline
                             hasWarning -> Icons.Default.WarningAmber
                             else -> Icons.Default.CheckCircle
                         },
@@ -277,11 +336,16 @@ fun SyncStatusBanner(
                 val runningItem = activeTransfers.firstOrNull {
                     it.state == TransferState.RUNNING.name && it.totalBytes > 0
                 }
-                if (runningItem != null && !live.isSyncing) {
+                val determinateFraction = when {
+                    !live.isSyncing && live.isTransferring && live.currentTransferFraction > 0f ->
+                        live.currentTransferFraction
+                    !live.isSyncing && runningItem != null ->
+                        (runningItem.bytesTransferred.toFloat() / runningItem.totalBytes).coerceIn(0f, 1f)
+                    else -> null
+                }
+                if (determinateFraction != null) {
                     LinearProgressIndicator(
-                        progress = {
-                            (runningItem.bytesTransferred.toFloat() / runningItem.totalBytes).coerceIn(0f, 1f)
-                        },
+                        progress = { determinateFraction },
                         color = contentColor,
                         trackColor = contentColor.copy(alpha = 0.2f),
                         modifier = Modifier
@@ -519,16 +583,21 @@ fun SyncStatusBanner(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                     ) {
                         OutlinedButton(
                             onClick = {
                                 scope.launch {
                                     appModule.syncEngine.sync(SyncScope.INCREMENTAL)
+                                    appModule.database.transferQueueDao()
+                                        .resetPendingBackoff(System.currentTimeMillis())
                                     val settings = appModule.telegramDriveRepository.current()
                                     SyncScheduler(context.applicationContext).kickTransfers(
-                                        settings.syncOnWifiOnly,
-                                        settings.syncWhileChargingOnly
+                                        wifiOnly = settings.syncOnWifiOnly,
+                                        chargingOnly = settings.syncWhileChargingOnly,
+                                        ignoreConstraints = true
                                     )
                                 }
                             },
@@ -540,16 +609,42 @@ fun SyncStatusBanner(
                             Text(stringResource(R.string.sync_banner_sync_now))
                         }
 
-                        if (failedTransfers > 0) {
+                        if (isQueuePaused) {
                             FilledTonalButton(
                                 onClick = {
                                     scope.launch {
                                         appModule.database.transferQueueDao()
-                                            .retryAllFailed(System.currentTimeMillis())
+                                            .resetPendingBackoff(System.currentTimeMillis())
                                         val settings = appModule.telegramDriveRepository.current()
                                         SyncScheduler(context.applicationContext).kickTransfers(
-                                            settings.syncOnWifiOnly,
-                                            settings.syncWhileChargingOnly
+                                            wifiOnly = settings.syncOnWifiOnly,
+                                            chargingOnly = settings.syncWhileChargingOnly,
+                                            ignoreConstraints = true
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("sync_banner_transfer_now")
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.sync_banner_transfer_now))
+                            }
+                        }
+
+                        if (failedTransfers > 0) {
+                            FilledTonalButton(
+                                onClick = {
+                                    scope.launch {
+                                        val now = System.currentTimeMillis()
+                                        appModule.database.transferQueueDao().retryAllFailed(now)
+                                        appModule.database.transferQueueDao().resetPendingBackoff(now)
+                                        val settings = appModule.telegramDriveRepository.current()
+                                        SyncScheduler(context.applicationContext).kickTransfers(
+                                            wifiOnly = settings.syncOnWifiOnly,
+                                            chargingOnly = settings.syncWhileChargingOnly,
+                                            ignoreConstraints = true
                                         )
                                     }
                                 },
@@ -564,8 +659,6 @@ fun SyncStatusBanner(
                                 Text(stringResource(R.string.sync_banner_retry_failed))
                             }
                         }
-
-                        Spacer(Modifier.weight(1f))
 
                         if (onNavigateToSettings != null) {
                             TextButton(
@@ -702,7 +795,8 @@ private fun ExplanationItemCard(explanation: SyncExplanation) {
 @Composable
 private fun syncPhaseTitle(
     phase: SyncPhase,
-    hasQueueWork: Boolean,
+    isActivelyTransferring: Boolean,
+    isQueuePaused: Boolean,
     hasError: Boolean,
     hasWarning: Boolean
 ): String = when {
@@ -712,7 +806,8 @@ private fun syncPhaseTitle(
     phase == SyncPhase.RESTORING_PATIENTS -> stringResource(R.string.sync_phase_restoring)
     phase == SyncPhase.PLANNING_MEDIA -> stringResource(R.string.sync_phase_planning)
     phase == SyncPhase.BACKING_UP_PATIENTS -> stringResource(R.string.sync_phase_backing_up)
-    hasQueueWork -> stringResource(R.string.sync_phase_transferring)
+    isActivelyTransferring -> stringResource(R.string.sync_phase_transferring)
+    isQueuePaused -> stringResource(R.string.sync_phase_paused)
     hasError -> stringResource(R.string.sync_phase_failed)
     hasWarning -> stringResource(R.string.sync_phase_warning)
     else -> stringResource(R.string.sync_phase_completed)
@@ -753,6 +848,33 @@ private fun explanationText(explanation: SyncExplanation): Pair<String, String> 
                 stringResource(R.string.sync_exp_transfer_failed_body, count, lastErr)
         }
 
+        ExplanationCode.TRANSFERS_WAITING_WIFI ->
+            stringResource(R.string.sync_exp_waiting_wifi_title) to
+                stringResource(R.string.sync_exp_waiting_wifi_body)
+
+        ExplanationCode.TRANSFERS_WAITING_CHARGING ->
+            stringResource(R.string.sync_exp_waiting_charging_title) to
+                stringResource(R.string.sync_exp_waiting_charging_body)
+
+        ExplanationCode.TRANSFERS_OFFLINE ->
+            stringResource(R.string.sync_exp_offline_title) to
+                stringResource(R.string.sync_exp_offline_body)
+
+        ExplanationCode.TRANSFERS_SESSION_CONNECTING ->
+            stringResource(R.string.sync_exp_session_starting_title) to
+                stringResource(R.string.sync_exp_session_starting_body)
+
+        ExplanationCode.TRANSFERS_RETRY_BACKOFF -> {
+            val waitLabel = detail.substringBefore('|').ifBlank { "…" }
+            val lastErr = detail.substringAfter('|', "").takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+            stringResource(R.string.sync_exp_retry_backoff_title, waitLabel) to
+                stringResource(R.string.sync_exp_retry_backoff_body, lastErr)
+        }
+
+        ExplanationCode.TRANSFERS_PAUSED_QUEUE ->
+            stringResource(R.string.sync_exp_paused_queue_title) to
+                stringResource(R.string.sync_exp_paused_queue_body, detail.ifBlank { "1" })
+
         ExplanationCode.MANIFEST_PULL_FAILED,
         ExplanationCode.DELETION_SYNC_FAILED,
         ExplanationCode.PLANNING_FAILED,
@@ -764,12 +886,145 @@ private fun explanationText(explanation: SyncExplanation): Pair<String, String> 
     }
 }
 
+internal data class QueueEnvironment(
+    val hasInternet: Boolean,
+    val hasUnmeteredWifi: Boolean,
+    val isCharging: Boolean,
+    val telegramReady: Boolean
+)
+
+@Composable
+private fun rememberQueueEnvironment(
+    context: Context,
+    telegramReady: Boolean
+): QueueEnvironment {
+    val appContext = context.applicationContext
+    var env by remember(appContext, telegramReady) {
+        mutableStateOf(readQueueEnvironment(appContext, telegramReady))
+    }
+
+    DisposableEffect(appContext, telegramReady) {
+        env = readQueueEnvironment(appContext, telegramReady)
+        val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                env = readQueueEnvironment(appContext, telegramReady)
+            }
+
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                env = readQueueEnvironment(appContext, telegramReady)
+            }
+
+            override fun onLost(network: Network) {
+                env = readQueueEnvironment(appContext, telegramReady)
+            }
+        }
+        runCatching { cm?.registerDefaultNetworkCallback(callback) }
+
+        val batteryReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                env = readQueueEnvironment(appContext, telegramReady)
+            }
+        }
+        runCatching {
+            appContext.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        }
+
+        onDispose {
+            runCatching { cm?.unregisterNetworkCallback(callback) }
+            runCatching { appContext.unregisterReceiver(batteryReceiver) }
+        }
+    }
+
+    return env
+}
+
+private fun readQueueEnvironment(context: Context, telegramReady: Boolean): QueueEnvironment {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+    val caps = cm?.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+    val hasInternet = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    val hasUnmeteredWifi = hasInternet &&
+        caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+
+    val batteryStatus = runCatching {
+        context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    }.getOrNull()
+    val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+        status == BatteryManager.BATTERY_STATUS_FULL
+
+    return QueueEnvironment(
+        hasInternet = hasInternet,
+        hasUnmeteredWifi = hasUnmeteredWifi,
+        isCharging = isCharging,
+        telegramReady = telegramReady
+    )
+}
+
+internal fun detectQueuePauseExplanation(
+    settings: TelegramDriveSettings,
+    pendingCount: Int,
+    activeTransfers: List<TransferQueueEntity>,
+    environment: QueueEnvironment,
+    nowMillis: Long = System.currentTimeMillis()
+): SyncExplanation? {
+    if (pendingCount <= 0) return null
+    if (!environment.hasInternet) {
+        return SyncExplanation(ExplanationCode.TRANSFERS_OFFLINE, ExplanationSeverity.WARNING)
+    }
+    if (!environment.telegramReady) {
+        return SyncExplanation(ExplanationCode.TRANSFERS_SESSION_CONNECTING, ExplanationSeverity.INFO)
+    }
+    if (settings.syncOnWifiOnly && !environment.hasUnmeteredWifi) {
+        return SyncExplanation(ExplanationCode.TRANSFERS_WAITING_WIFI, ExplanationSeverity.WARNING)
+    }
+    if (settings.syncWhileChargingOnly && !environment.isCharging) {
+        return SyncExplanation(ExplanationCode.TRANSFERS_WAITING_CHARGING, ExplanationSeverity.WARNING)
+    }
+    val pendingRows = activeTransfers.filter { it.state == TransferState.PENDING.name }
+    val nextAttempt = pendingRows.mapNotNull { it.nextAttemptAt.takeIf { ts -> ts > nowMillis } }.minOrNull()
+    if (nextAttempt != null) {
+        val remainingSec = ((nextAttempt - nowMillis) / 1_000L).coerceAtLeast(1L)
+        val waitText = if (remainingSec >= 60L) "${(remainingSec + 59L) / 60L}m" else "${remainingSec}s"
+        val err = pendingRows.firstNotNullOfOrNull { it.lastError?.takeIf(String::isNotBlank) }.orEmpty()
+        return SyncExplanation(
+            code = ExplanationCode.TRANSFERS_RETRY_BACKOFF,
+            severity = ExplanationSeverity.WARNING,
+            detail = if (err.isNotEmpty()) "$waitText|$err" else waitText
+        )
+    }
+    return SyncExplanation(
+        code = ExplanationCode.TRANSFERS_PAUSED_QUEUE,
+        severity = ExplanationSeverity.INFO,
+        detail = pendingCount.toString()
+    )
+}
+
 internal fun buildResolvedExplanations(
     live: SyncLiveStatus,
     failedTransfers: Int,
-    lastSyncError: String
+    lastSyncError: String,
+    settings: TelegramDriveSettings = TelegramDriveSettings(),
+    pendingCount: Int = 0,
+    isQueuePaused: Boolean = false,
+    activeTransfers: List<TransferQueueEntity> = emptyList(),
+    environment: QueueEnvironment? = null,
+    nowMillis: Long = System.currentTimeMillis()
 ): List<SyncExplanation> {
     val result = live.explanations.toMutableList()
+    if (isQueuePaused && environment != null) {
+        detectQueuePauseExplanation(
+            settings = settings,
+            pendingCount = pendingCount,
+            activeTransfers = activeTransfers,
+            environment = environment,
+            nowMillis = nowMillis
+        )?.let { pauseExp ->
+            if (result.none { it.code == pauseExp.code }) {
+                result += pauseExp
+            }
+        }
+    }
     if (failedTransfers > 0 && result.none { it.code == ExplanationCode.TRANSFER_FAILURES }) {
         result += SyncExplanation(
             code = ExplanationCode.TRANSFER_FAILURES,

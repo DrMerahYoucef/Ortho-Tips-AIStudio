@@ -79,7 +79,7 @@ data class TelegramDriveSettings(
     val accountName: String = "",
     val accountPhoneSuffix: String = "",
     val syncFrequency: SyncFrequency = SyncFrequency.ON_CHANGE,
-    val syncOnWifiOnly: Boolean = true,
+    val syncOnWifiOnly: Boolean = false,
     val syncWhileChargingOnly: Boolean = false,
     val backgroundSyncEnabled: Boolean = true,
     val encryptUploads: Boolean = true,
@@ -137,7 +137,7 @@ class TelegramDriveRepository(
             syncFrequency = runCatching {
                 SyncFrequency.valueOf(prefs[Keys.SYNC_FREQUENCY].orEmpty())
             }.getOrDefault(SyncFrequency.ON_CHANGE),
-            syncOnWifiOnly = prefs[Keys.WIFI_ONLY] ?: true,
+            syncOnWifiOnly = prefs[Keys.WIFI_ONLY] ?: false,
             syncWhileChargingOnly = prefs[Keys.CHARGING_ONLY] ?: false,
             backgroundSyncEnabled = prefs[Keys.BACKGROUND_SYNC] ?: true,
             encryptUploads = prefs[Keys.ENCRYPT_UPLOADS] ?: true,
